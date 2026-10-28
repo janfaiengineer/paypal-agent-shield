@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <title>PayPal Agent Shield — Unified Agentic Commerce Console</title>
   <script src="https://cdn.jsdelivr.net/npm/ag-grid-community/dist/ag-grid-community.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
   <style>
     :root {
       --bg: #070b14;
@@ -124,19 +126,79 @@
       border-radius: 10px;
       font-size: 13px;
       line-height: 1.5;
-      white-space: pre-wrap;
+      word-break: break-word;
     }
     .msg.user {
       align-self: flex-end;
       background: #0284c7;
       color: white;
       border-bottom-right-radius: 2px;
+      white-space: pre-wrap;
     }
     .msg.agent {
       align-self: flex-start;
       background: var(--card);
       border: 1px solid var(--border);
       border-bottom-left-radius: 2px;
+      white-space: normal;
+    }
+    /* Estilos de Markdown dentro del chat del agente */
+    .msg-content p {
+      margin: 0 0 8px 0;
+    }
+    .msg-content p:last-child {
+      margin-bottom: 0;
+    }
+    .msg-content h1, .msg-content h2, .msg-content h3, .msg-content h4 {
+      margin: 10px 0 6px 0;
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+    .msg-content h1:first-child, .msg-content h2:first-child, .msg-content h3:first-child {
+      margin-top: 0;
+    }
+    .msg-content ul, .msg-content ol {
+      margin: 6px 0 8px 0;
+      padding-left: 18px;
+    }
+    .msg-content li {
+      margin-bottom: 4px;
+    }
+    .msg-content li:last-child {
+      margin-bottom: 0;
+    }
+    .msg-content strong, .msg-content b {
+      color: #f8fafc;
+      font-weight: 700;
+    }
+    .msg-content code {
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11.5px;
+      background: rgba(15, 23, 42, 0.75);
+      color: #38bdf8;
+      padding: 2px 5px;
+      border-radius: 4px;
+      border: 1px solid rgba(56, 189, 248, 0.25);
+    }
+    .msg-content pre {
+      margin: 8px 0;
+      padding: 10px;
+      background: #090d16;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow-x: auto;
+    }
+    .msg-content pre code {
+      background: transparent;
+      border: none;
+      padding: 0;
+      color: #e2e8f0;
+    }
+    .msg-content hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 8px 0;
     }
     .tools-trace {
       display: flex;
@@ -230,17 +292,68 @@
       border: 1px solid var(--border);
       border-radius: 8px;
       overflow: hidden;
+      --ag-background-color: #0f172a;
+      --ag-header-background-color: #1e293b;
+      --ag-odd-row-background-color: #0b1120;
+      --ag-foreground-color: #f1f5f9;
+      --ag-secondary-foreground-color: #94a3b8;
+      --ag-border-color: #334155;
+      --ag-row-hover-color: rgba(56, 189, 248, 0.12);
     }
     .row-blocked {
-      background-color: rgba(239, 68, 68, 0.22) !important;
-      color: #fecaca !important;
+      background-color: #7f1d1d !important;
+      color: #ffffff !important;
+      font-weight: 600;
+      border-left: 4px solid #ef4444 !important;
+    }
+    .row-blocked .ag-cell {
+      color: #ffffff !important;
       font-weight: 600;
     }
+    .row-blocked:hover {
+      background-color: #991b1b !important;
+    }
     .row-approved {
-      background-color: rgba(16, 185, 129, 0.14) !important;
+      background-color: rgba(6, 78, 59, 0.65) !important;
+      color: #ecfdf5 !important;
+      border-left: 4px solid #10b981 !important;
+    }
+    .row-approved .ag-cell {
+      color: #d1fae5 !important;
     }
     .row-policy {
-      background-color: rgba(56, 189, 248, 0.14) !important;
+      background-color: rgba(12, 74, 110, 0.55) !important;
+      color: #f0f9ff !important;
+      border-left: 4px solid #38bdf8 !important;
+    }
+    .row-policy .ag-cell {
+      color: #e0f2fe !important;
+    }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.4;
+      letter-spacing: 0.02em;
+    }
+    .status-pill.blocked {
+      background: #ef4444;
+      color: #ffffff;
+      box-shadow: 0 0 8px rgba(239, 68, 68, 0.45);
+    }
+    .status-pill.approved {
+      background: rgba(16, 185, 129, 0.25);
+      color: #6ee7b7;
+      border: 1px solid #10b981;
+    }
+    .status-pill.policy {
+      background: rgba(56, 189, 248, 0.25);
+      color: #7dd3fc;
+      border: 1px solid #38bdf8;
     }
   </style>
 </head>
@@ -329,7 +442,36 @@
     let policyGridApi;
     let auditGridApi;
 
+    const darkGridTheme = (window.agGrid && agGrid.themeQuartz && agGrid.colorSchemeDark)
+      ? agGrid.themeQuartz.withPart(agGrid.colorSchemeDark).withParams({
+          backgroundColor: "#0f172a",
+          headerBackgroundColor: "#1e293b",
+          oddRowBackgroundColor: "#0b1120",
+          foregroundColor: "#f1f5f9",
+          borderColor: "#334155"
+        })
+      : undefined;
+
+    function renderMarkdown(mdText) {
+      if (!mdText) return "";
+      if (window.marked && typeof window.marked.parse === "function") {
+        const rawHtml = window.marked.parse(mdText, { breaks: true, gfm: true });
+        return window.DOMPurify ? window.DOMPurify.sanitize(rawHtml) : rawHtml;
+      }
+      // Fallback ligero si el CDN de marked no está disponible
+      return String(mdText)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/```([\s\S]*?)```/g, "<pre><code>$1</code></pre>")
+        .replace(/`([^`]+)`/g, "<code>$1</code>")
+        .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+        .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+        .replace(/\n/g, "<br>");
+    }
+
     const policyGridOptions = {
+      ...(darkGridTheme ? { theme: darkGridTheme } : {}),
       columnDefs: [
         { field: "agent_id", headerName: "Agent ID", width: 150 },
         { field: "policy_id", headerName: "Policy ID", width: 130 },
@@ -369,6 +511,7 @@
     };
 
     const auditGridOptions = {
+      ...(darkGridTheme ? { theme: darkGridTheme } : {}),
       columnDefs: [
         { field: "timestamp", headerName: "Hora", width: 95 },
         { field: "mandate_id", headerName: "AP2 Mandate", width: 145 },
@@ -379,7 +522,24 @@
           width: 110,
           valueFormatter: p => `$${Number(p.value).toFixed(2)}`
         },
-        { field: "status", headerName: "Veredicto Shield", width: 175 },
+        {
+          field: "status",
+          headerName: "Veredicto Shield",
+          width: 185,
+          cellRenderer: p => {
+            const val = p.value || "";
+            if (val === "BLOCKED_BY_SHIELD") {
+              return `<span class="status-pill blocked">🛑 ${val}</span>`;
+            }
+            if (val === "PAYPAL_COMPLETED") {
+              return `<span class="status-pill approved">✅ ${val}</span>`;
+            }
+            if (val === "POLICY_SIGNED") {
+              return `<span class="status-pill policy">🔐 ${val}</span>`;
+            }
+            return val;
+          }
+        },
         { field: "details", headerName: "Evidencia Criptográfica Ed25519 & PayPal Order ID", flex: 1 }
       ],
       rowData: [],
@@ -419,7 +579,12 @@
       }
 
       const contentSpan = document.createElement("div");
-      contentSpan.innerText = text;
+      contentSpan.className = "msg-content";
+      if (role === "agent") {
+        contentSpan.innerHTML = renderMarkdown(text);
+      } else {
+        contentSpan.innerText = text;
+      }
       div.appendChild(contentSpan);
 
       box.appendChild(div);
