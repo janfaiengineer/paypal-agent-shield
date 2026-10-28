@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>PayPal Agent Shield — Unified Agentic Commerce Console</title>
+  <script src="https://cdn.jsdelivr.net/npm/ag-grid-community/dist/ag-grid-community.min.js"></script>
+  <style>
+    :root {
+      --bg: #070b14;
+      --panel: #0f172a;
+      --card: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --green: #10b981;
+      --red: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+    }
+    .topbar {
+      height: 58px;
+      padding: 0 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #090d16;
+      border-bottom: 1px solid var(--border);
+    }
+    .brand {
+      font-size: 18px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .tag {
+      font-size: 11px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: rgba(56, 189, 248, 0.14);
+      color: var(--accent);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      font-weight: 600;
+    }
+    .badge-live {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid #059669;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-weight: 600;
+    }
+    .workspace {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      overflow: hidden;
+    }
+    /* PANEL IZQUIERDO: CHAT DE GOOGLE ADK */
+    .chat-panel {
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 58px);
+    }
+    .chat-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .quick-actions {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      background: rgba(15, 23, 42, 0.6);
+    }
+    .chip {
+      font-size: 11px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: #e2e8f0;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .chip:hover {
+      border-color: var(--accent);
+      background: rgba(56, 189, 248, 0.15);
+    }
+    .chip.danger:hover {
+      border-color: var(--red);
+      background: rgba(239, 68, 68, 0.15);
+    }
+    .chat-messages {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .msg {
+      max-width: 90%;
+      padding: 11px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+    .msg.user {
+      align-self: flex-end;
+      background: #0284c7;
+      color: white;
+      border-bottom-right-radius: 2px;
+    }
+    .msg.agent {
+      align-self: flex-start;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 2px;
+    }
+    .tools-trace {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-bottom: 6px;
+    }
+    .tool-badge {
+      font-size: 10px;
+      font-family: monospace;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(16, 185, 129, 0.16);
+      color: #6ee7b7;
+      border: 1px solid rgba(16, 185, 129, 0.35);
+    }
+    .chat-input-area {
+      padding: 12px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+    }
+    .chat-input-area input {
+      flex: 1;
+      background: #090d16;
+      border: 1px solid var(--border);
+      color: white;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      outline: none;
+    }
+    .chat-input-area input:focus {
+      border-color: var(--accent);
+    }
+    .chat-input-area button {
+      background: var(--accent);
+      color: #090d16;
+      border: none;
+      padding: 0 16px;
+      border-radius: 6px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    /* PANEL DERECHO: AG GRID + KPIs */
+    .dashboard-panel {
+      padding: 20px 24px;
+      overflow-y: auto;
+      height: calc(100vh - 58px);
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .kpi-bar {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+    .kpi-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      padding: 14px 18px;
+      border-radius: 8px;
+    }
+    .kpi-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .kpi-value {
+      font-size: 24px;
+      font-weight: 700;
+      margin-top: 4px;
+      color: var(--accent);
+    }
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .hint {
+      font-size: 12px;
+      color: #fbbf24;
+      font-weight: normal;
+    }
+    .grid-wrapper {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .row-blocked {
+      background-color: rgba(239, 68, 68, 0.22) !important;
+      color: #fecaca !important;
+      font-weight: 600;
+    }
+    .row-approved {
+      background-color: rgba(16, 185, 129, 0.14) !important;
+    }
+    .row-policy {
+      background-color: rgba(56, 189, 248, 0.14) !important;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="brand">
+      <span>🛡️ PayPal Agent Shield</span>
+      <span class="tag">Google ADK</span>
+      <span class="tag">AP2 Ed25519</span>
+      <span class="tag">PayPal APIMatic SDK</span>
+      <span class="tag">AG Grid</span>
+    </div>
+    <span class="badge-live">● SSE REAL-TIME TELEMETRY</span>
+  </div>
+
+  <div class="workspace">
+    <!-- COLUMNA IZQUIERDA: AGENTE GOOGLE ADK -->
+    <div class="chat-panel">
+      <div class="chat-header">
+        <span>🤖 Google ADK Procurement Agent</span>
+        <span style="font-size:11px; color:var(--muted);">gemini-2.5-flash</span>
+      </div>
+
+      <div class="quick-actions">
+        <button class="chip" onclick="sendQuickPrompt('Muéstrame el catálogo de productos y mi presupuesto actual en AG Grid.')">📋 Ver Catálogo y Saldo</button>
+        <button class="chip" onclick="sendQuickPrompt('Compra la Silla de Oficina Ergonómica de $120 USD.')">✅ 1. Comprar Silla ($120)</button>
+        <button class="chip danger" onclick="sendQuickPrompt('Ahora intenta comprar el Monitor 4K de $150 USD.')">🚨 2. Exceder Saldo ($150)</button>
+        <button class="chip danger" onclick="sendQuickPrompt('Compra el Teclado Mecánico de $65 USD pero simula un ataque criptográfico adulterando el mandato en tránsito.')">🏴‍☠️ 3. Ataque Ed25519</button>
+        <button class="chip danger" onclick="sendQuickPrompt('Intenta comprar el Teclado Mecánico (SKU KEYB-MECH-02) pero envía un precio alucinado de $10 USD.')">🧠 4. Simular Alucinación</button>
+      </div>
+
+      <div class="chat-messages" id="chat-box">
+        <div class="msg agent">Hola. Soy el Agente de Compras gobernado por <b>Google ADK</b> y <b>PayPal Agent Shield</b>. Usa los botones rápidos de arriba o escribe una orden para ver cómo las tablas de <b>AG Grid</b> validan cada mandato <b>AP2 (Ed25519)</b> en tiempo real.</div>
+      </div>
+
+      <form class="chat-input-area" onsubmit="handleChatSubmit(event)">
+        <input type="text" id="chat-input" placeholder="Escribe una orden para el agente ADK..." autocomplete="off" />
+        <button type="submit" id="send-btn">Enviar</button>
+      </form>
+    </div>
+
+    <!-- COLUMNA DERECHA: GOBERNANZA CFO EN AG GRID -->
+    <div class="dashboard-panel">
+      <div class="kpi-bar">
+        <div class="kpi-card">
+          <div class="kpi-label">Presupuesto Autorizado (CFO)</div>
+          <div class="kpi-value" id="kpi-max">$200.00</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Saldo Disponible (AG Grid)</div>
+          <div class="kpi-value" id="kpi-remaining" style="color:#34d399;">$200.00</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Identidades Ed25519 & Hash AP2</div>
+          <div class="kpi-value" id="kpi-hash" style="font-size:12px; font-family:monospace; color:#cbd5e1; margin-top:8px;">—</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-header">
+          <span>1. Políticas Presupuestarias del CFO (AG Grid Editable)</span>
+          <span class="hint">💡 Haz doble clic en "✏️ Max Budget" y presiona Enter para firmar un nuevo Mandato AP2</span>
+        </div>
+        <div id="policyGrid" class="grid-wrapper ag-theme-quartz-dark" style="height: 110px; width: 100%;"></div>
+      </div>
+
+      <div style="flex:1; display:flex; flex-direction:column;">
+        <div class="section-header">
+          <span>2. Firewall en Vivo: Auditoría Criptográfica AP2 & Liquidación PayPal (APIMatic)</span>
+        </div>
+        <div id="auditGrid" class="grid-wrapper ag-theme-quartz-dark" style="flex: 1; min-height: 300px; width: 100%;"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let policyGridApi;
+    let auditGridApi;
+
+    const policyGridOptions = {
+      columnDefs: [
+        { field: "agent_id", headerName: "Agent ID", width: 150 },
+        { field: "policy_id", headerName: "Policy ID", width: 130 },
+        {
+          field: "max_budget_usd",
+          headerName: "✏️ Max Budget (USD)",
+          editable: true,
+          width: 175,
+          valueParser: params => Number(params.newValue),
+          valueFormatter: params => `$${Number(params.value).toFixed(2)}`,
+          cellStyle: { backgroundColor: "rgba(56, 189, 248, 0.16)", fontWeight: "bold", color: "#38bdf8" }
+        },
+        {
+          field: "remaining_usd",
+          headerName: "Remaining (USD)",
+          width: 160,
+          valueFormatter: params => `$${Number(params.value).toFixed(2)}`,
+          cellStyle: { fontWeight: "bold", color: "#34d399" }
+        },
+        { field: "cfo_signature", headerName: "CFO Ed25519 Signature", flex: 1 },
+        { field: "ap2_policy_hash", headerName: "AP2 Policy Hash (SHA-256)", flex: 1 }
+      ],
+      rowData: [],
+      onCellValueChanged: async (event) => {
+        if (event.colDef.field === "max_budget_usd") {
+          await fetch("/api/policy", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              agent_id: event.data.agent_id,
+              max_budget_usd: Number(event.newValue),
+              allowed_category: event.data.allowed_category
+            })
+          });
+        }
+      }
+    };
+
+    const auditGridOptions = {
+      columnDefs: [
+        { field: "timestamp", headerName: "Hora", width: 95 },
+        { field: "mandate_id", headerName: "AP2 Mandate", width: 145 },
+        { field: "item", headerName: "Producto / Evento", width: 220 },
+        {
+          field: "amount",
+          headerName: "Monto",
+          width: 110,
+          valueFormatter: p => `$${Number(p.value).toFixed(2)}`
+        },
+        { field: "status", headerName: "Veredicto Shield", width: 175 },
+        { field: "details", headerName: "Evidencia Criptográfica Ed25519 & PayPal Order ID", flex: 1 }
+      ],
+      rowData: [],
+      getRowClass: params => {
+        if (params.data.status === "BLOCKED_BY_SHIELD") return "row-blocked";
+        if (params.data.status === "PAYPAL_COMPLETED") return "row-approved";
+        if (params.data.status === "POLICY_SIGNED") return "row-policy";
+        return "";
+      }
+    };
+
+    function renderUI(data) {
+      const p = data.policy;
+      document.getElementById("kpi-max").innerText = `$${Number(p.max_budget_usd).toFixed(2)}`;
+      document.getElementById("kpi-remaining").innerText = `$${Number(p.remaining_usd).toFixed(2)}`;
+      document.getElementById("kpi-hash").innerText = `CFO PubKey: ${p.cfo_pubkey}... | AP2: ${p.ap2_policy_hash.slice(0, 18)}...`;
+
+      policyGridApi.setGridOption("rowData", [p]);
+      auditGridApi.setGridOption("rowData", data.audit_log);
+    }
+
+    function appendMessage(role, text, tools = []) {
+      const box = document.getElementById("chat-box");
+      const div = document.createElement("div");
+      div.className = `msg ${role}`;
+
+      if (tools && tools.length > 0) {
+        const traceDiv = document.createElement("div");
+        traceDiv.className = "tools-trace";
+        tools.forEach(t => {
+          const badge = document.createElement("span");
+          badge.className = "tool-badge";
+          badge.innerText = `⚡ ADK Tool: ${t}()`;
+          traceDiv.appendChild(badge);
+        });
+        div.appendChild(traceDiv);
+      }
+
+      const contentSpan = document.createElement("div");
+      contentSpan.innerText = text;
+      div.appendChild(contentSpan);
+
+      box.appendChild(div);
+      box.scrollTop = box.scrollHeight;
+      return div;
+    }
+
+    async function sendQuickPrompt(promptText) {
+      const input = document.getElementById("chat-input");
+      input.value = promptText;
+      await submitMessage(promptText);
+    }
+
+    async function handleChatSubmit(e) {
+      e.preventDefault();
+      const input = document.getElementById("chat-input");
+      const text = input.value.trim();
+      if (!text) return;
+      await submitMessage(text);
+    }
+
+    async function submitMessage(text) {
+      const input = document.getElementById("chat-input");
+      const btn = document.getElementById("send-btn");
+      input.value = "";
+      input.disabled = true;
+      btn.disabled = true;
+
+      appendMessage("user", text);
+      const loadingMsg = appendMessage("agent", "⏳ Ejecutando grafo Google ADK y firmando mandato AP2...");
+
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: text })
+        });
+        const data = await res.json();
+        loadingMsg.remove();
+        appendMessage("agent", data.reply, data.tools);
+      } catch (err) {
+        loadingMsg.innerText = "❌ Error comunicando con el agente ADK: " + err.message;
+      } finally {
+        input.disabled = false;
+        btn.disabled = false;
+        input.focus();
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      policyGridApi = agGrid.createGrid(document.getElementById("policyGrid"), policyGridOptions);
+      auditGridApi = agGrid.createGrid(document.getElementById("auditGrid"), auditGridOptions);
+
+      const res = await fetch("/api/state");
+      renderUI(await res.json());
+
+      const evtSource = new EventSource("/api/stream");
+      evtSource.onmessage = (event) => renderUI(JSON.parse(event.data));
+    });
+  </script>
+</body>
+</html>
