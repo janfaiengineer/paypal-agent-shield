@@ -81,6 +81,12 @@ class ChatRequest(BaseModel):
     session_id: str = "Unified-Session-01"
 
 
+class CredentialsConfig(BaseModel):
+    google_api_key: str = ""
+    paypal_client_id: str = ""
+    paypal_client_secret: str = ""
+
+
 _init_sig = sign_cfo_policy("pol_aggrid_001", "procurement-01", 200.00, "OFFICE_AND_TECH")
 
 state = {
@@ -132,6 +138,41 @@ async def get_state():
     p = state["policies"]["procurement-01"]
     enrich_policy_hash(p)
     return {"policy": p, "audit_log": state["audit_log"]}
+
+
+@app.get("/api/config/status")
+async def get_config_status():
+    """Devuelve si las llaves ya están activas (sin exponer los secretos al navegador)."""
+    has_gemini = bool(os.environ.get("GOOGLE_API_KEY"))
+    return {
+        "gemini_ready": has_gemini,
+        "paypal_live_ready": paypal_sdk.is_configured,
+    }
+
+
+@app.post("/api/config")
+async def update_runtime_config(cfg: CredentialsConfig):
+    """Actualiza en memoria las credenciales de Google ADK y PayPal APIMatic SDK."""
+    if cfg.google_api_key.strip():
+        os.environ["GOOGLE_API_KEY"] = cfg.google_api_key.strip()
+
+    if cfg.paypal_client_id.strip() and cfg.paypal_client_secret.strip():
+        paypal_sdk.configure_credentials(cfg.paypal_client_id, cfg.paypal_client_secret)
+
+    state["audit_log"].insert(0, {
+        "timestamp": now_str(),
+        "mandate_id": "SYS-CFG",
+        "item": "Runtime Credentials Updated",
+        "amount": 0.0,
+        "status": "POLICY_SIGNED",
+        "details": f"Gemini Key: {'ACTIVE' if os.environ.get('GOOGLE_API_KEY') else 'MISSING'} | PayPal Mode: {'LIVE SANDBOX' if paypal_sdk.is_configured else 'SIMULATED'}"
+    })
+    await broadcast_state()
+    return {
+        "status": "OK",
+        "gemini_ready": bool(os.environ.get("GOOGLE_API_KEY")),
+        "paypal_live_ready": paypal_sdk.is_configured
+    }
 
 
 @app.post("/api/policy")

@@ -254,7 +254,15 @@
       <span class="tag">PayPal APIMatic SDK</span>
       <span class="tag">AG Grid</span>
     </div>
-    <span class="badge-live">● SSE REAL-TIME TELEMETRY</span>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span id="creds-status" class="tag" style="cursor:pointer;" onclick="toggleConfigModal()">
+        🔑 Modo: Verificando...
+      </span>
+      <button onclick="toggleConfigModal()" style="background:#1e293b; color:#f8fafc; border:1px solid #334155; padding:6px 12px; border-radius:6px; font-size:12px; cursor:pointer; font-weight:600;">
+        ⚙️ API Keys (BYOK)
+      </button>
+      <span class="badge-live">● SSE REAL-TIME</span>
+    </div>
   </div>
 
   <div class="workspace">
@@ -461,9 +469,46 @@
       }
     }
 
+    function toggleConfigModal() {
+      const modal = document.getElementById("config-modal");
+      modal.style.display = modal.style.display === "none" ? "flex" : "none";
+    }
+
+    async function refreshCredsStatus() {
+      const res = await fetch("/api/config/status");
+      const st = await res.json();
+      const badge = document.getElementById("creds-status");
+      if (st.paypal_live_ready && st.gemini_ready) {
+        badge.innerText = "🔑 PayPal Sandbox: LIVE | ADK: READY";
+        badge.style.color = "#34d399";
+        badge.style.borderColor = "#059669";
+      } else {
+        badge.innerText = `🔑 PayPal: ${st.paypal_live_ready ? 'LIVE' : 'SIMULATED'} | ADK: ${st.gemini_ready ? 'READY' : 'NO KEY'}`;
+        badge.style.color = "#fbbf24";
+      }
+    }
+
+    async function saveCredentials() {
+      await fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          google_api_key: document.getElementById("cfg-gemini").value,
+          paypal_client_id: document.getElementById("cfg-pp-id").value,
+          paypal_client_secret: document.getElementById("cfg-pp-secret").value
+        })
+      });
+      document.getElementById("cfg-gemini").value = "";
+      document.getElementById("cfg-pp-secret").value = "";
+      toggleConfigModal();
+      await refreshCredsStatus();
+    }
+
     document.addEventListener("DOMContentLoaded", async () => {
       policyGridApi = agGrid.createGrid(document.getElementById("policyGrid"), policyGridOptions);
       auditGridApi = agGrid.createGrid(document.getElementById("auditGrid"), auditGridOptions);
+
+      await refreshCredsStatus();
 
       const res = await fetch("/api/state");
       renderUI(await res.json());
@@ -472,5 +517,28 @@
       evtSource.onmessage = (event) => renderUI(JSON.parse(event.data));
     });
   </script>
+
+  <div id="config-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:999; align-items:center; justify-content:center;">
+    <div style="background:#0f172a; border:1px solid #334155; border-radius:12px; width:460px; padding:24px; box-shadow:0 20px 50px rgba(0,0,0,0.6);">
+      <h3 style="margin:0 0 6px 0; font-size:16px;">🔐 Configurar Credenciales en Caliente (BYOK)</h3>
+      <p style="margin:0 0 16px 0; font-size:12px; color:#94a3b8; line-height:1.4;">
+        Las llaves se inyectan exclusivamente en la memoria del <b>Shield Control Plane</b>. El LLM nunca tiene acceso de lectura a tus secretos de PayPal.
+      </p>
+
+      <label style="font-size:11px; color:#cbd5e1; font-weight:600;">GOOGLE_API_KEY (Gemini / ADK)</label>
+      <input id="cfg-gemini" type="password" placeholder="AIzaSy... (Dejar vacío para conservar actual)" style="width:100%; margin:6px 0 14px 0; padding:9px; background:#070b14; border:1px solid #334155; color:white; border-radius:6px; font-size:12px;" />
+
+      <label style="font-size:11px; color:#cbd5e1; font-weight:600;">PAYPAL_CLIENT_ID (Sandbox)</label>
+      <input id="cfg-pp-id" type="text" placeholder="Client ID de developer.paypal.com" style="width:100%; margin:6px 0 14px 0; padding:9px; background:#070b14; border:1px solid #334155; color:white; border-radius:6px; font-size:12px;" />
+
+      <label style="font-size:11px; color:#cbd5e1; font-weight:600;">PAYPAL_CLIENT_SECRET (Sandbox)</label>
+      <input id="cfg-pp-secret" type="password" placeholder="Client Secret de PayPal Sandbox" style="width:100%; margin:6px 0 18px 0; padding:9px; background:#070b14; border:1px solid #334155; color:white; border-radius:6px; font-size:12px;" />
+
+      <div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button onclick="toggleConfigModal()" style="background:transparent; color:#94a3b8; border:1px solid #334155; padding:8px 14px; border-radius:6px; cursor:pointer; font-size:12px;">Cancelar</button>
+        <button onclick="saveCredentials()" style="background:#38bdf8; color:#090d16; border:none; padding:8px 16px; border-radius:6px; font-weight:700; cursor:pointer; font-size:12px;">Guardar y Activar</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

@@ -44,6 +44,20 @@ class PayPalAPIMaticProcessor:
                 environment=Environment.SANDBOX,
             )
 
+    def configure_credentials(self, client_id: str, client_secret: str):
+        """Permite actualizar las credenciales de PayPal Sandbox en caliente desde la GUI."""
+        self.client_id = client_id.strip()
+        self.client_secret = client_secret.strip()
+        self.is_configured = bool(self.client_id and self.client_secret)
+        if self.is_configured:
+            self.client = PaypalServersdkClient(
+                client_credentials_auth_credentials=ClientCredentialsAuthCredentials(
+                    o_auth_client_id=self.client_id,
+                    o_auth_client_secret=self.client_secret,
+                ),
+                environment=Environment.SANDBOX,
+            )
+
     def execute_ap2_settlement(
         self,
         mandate_id: str,
