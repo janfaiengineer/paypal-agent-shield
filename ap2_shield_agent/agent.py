@@ -120,7 +120,7 @@ async def execute_ap2_checkout(
 
 root_agent = Agent(
     name="paypal_ap2_procurement_agent",
-    model="gemini-3.5-flash-lite",
+    model="gemini-3.5-flash",
     description="Agente de compras autónomo gobernado por criptografía Ed25519 (AP2), AG Grid y PayPal Agent Shield.",
     instruction="""
     Eres el Agente de Compras Autónomo corporativo operando con Google ADK, el protocolo criptográfico AP2 (Ed25519) y PayPal Agent Shield.
