@@ -217,6 +217,21 @@ wheels = [
 ]
 
 [[package]]
+name = "channel3-sdk"
+version = "4.6.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "pydantic-core" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5a/29/704a987754bb9972dcb83173c8443defdddfcd588a9c3e2e6bc51f3e9945/channel3_sdk-4.6.0.tar.gz", hash = "sha256:a8aa4111a1ba074e74e3036e79d679e1a4dfa48b23fd7ceb67d7ccd1fe95c4b1", size = 103681, upload-time = "2026-10-28T19:31:05.289Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fc/2c/8ac9ed579a7a7a4053c4c63ee007dd526312bae14e9a42d3cc22ab489a2e/channel3_sdk-4.6.0-py3-none-any.whl", hash = "sha256:66e97474afd1ab24062b9334e4f4a9f448dce2f90e9b58780cce6f42ff0a4344", size = 200343, upload-time = "2026-10-28T19:31:03.568Z" },
+]
+
+[[package]]
 name = "charset-normalizer"
 version = "3.5.2"
 source = { registry = "https://pypi.org/simple" }
@@ -545,6 +560,7 @@ name = "hackaton-paypal"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "channel3-sdk" },
     { name = "cryptography" },
     { name = "google-adk" },
     { name = "paypal-server-sdk" },
@@ -553,6 +569,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "channel3-sdk", specifier = ">=4.6.0" },
     { name = "cryptography", specifier = ">=50.0.2" },
     { name = "google-adk", specifier = ">=2.13.0" },
     { name = "paypal-server-sdk", specifier = ">=2.4.0" },

@@ -1,4 +1,5 @@
 import os
+import re
 import asyncio
 import uuid
 import json
@@ -10,6 +11,14 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+try:
+    from channel3 import AsyncChannel3Client
+except ImportError:
+    try:
+        from channel3_sdk import AsyncChannel3 as AsyncChannel3Client
+    except ImportError:
+        AsyncChannel3Client = None
 
 # Carga variables de entorno (.env) para Google ADK (GOOGLE_API_KEY) y PayPal
 load_dotenv()
@@ -85,6 +94,7 @@ class CredentialsConfig(BaseModel):
     google_api_key: str = ""
     paypal_client_id: str = ""
     paypal_client_secret: str = ""
+    channel3_api_key: str = ""
 
 
 _init_sig = sign_cfo_policy("pol_aggrid_001", "procurement-01", 200.00, "OFFICE_AND_TECH")
@@ -144,20 +154,25 @@ async def get_state():
 async def get_config_status():
     """Devuelve si las llaves ya están activas (sin exponer los secretos al navegador)."""
     has_gemini = bool(os.environ.get("GOOGLE_API_KEY"))
+    has_channel3 = bool(os.environ.get("CHANNEL3_API_KEY"))
     return {
         "gemini_ready": has_gemini,
         "paypal_live_ready": paypal_sdk.is_configured,
+        "channel3_ready": has_channel3,
     }
 
 
 @app.post("/api/config")
 async def update_runtime_config(cfg: CredentialsConfig):
-    """Actualiza en memoria las credenciales de Google ADK y PayPal APIMatic SDK."""
+    """Actualiza en memoria las credenciales de Google ADK, PayPal APIMatic SDK y Channel3."""
     if cfg.google_api_key.strip():
         os.environ["GOOGLE_API_KEY"] = cfg.google_api_key.strip()
 
     if cfg.paypal_client_id.strip() and cfg.paypal_client_secret.strip():
         paypal_sdk.configure_credentials(cfg.paypal_client_id, cfg.paypal_client_secret)
+
+    if cfg.channel3_api_key.strip():
+        os.environ["CHANNEL3_API_KEY"] = cfg.channel3_api_key.strip()
 
     state["audit_log"].insert(0, {
         "timestamp": now_str(),
@@ -165,14 +180,96 @@ async def update_runtime_config(cfg: CredentialsConfig):
         "item": "Runtime Credentials Updated",
         "amount": 0.0,
         "status": "POLICY_SIGNED",
-        "details": f"Gemini Key: {'ACTIVE' if os.environ.get('GOOGLE_API_KEY') else 'MISSING'} | PayPal Mode: {'LIVE SANDBOX' if paypal_sdk.is_configured else 'SIMULATED'}"
+        "details": f"Gemini Key: {'ACTIVE' if os.environ.get('GOOGLE_API_KEY') else 'MISSING'} | Channel3 Key: {'ACTIVE' if os.environ.get('CHANNEL3_API_KEY') else 'MISSING'} | PayPal Mode: {'LIVE SANDBOX' if paypal_sdk.is_configured else 'SIMULATED'}"
     })
     await broadcast_state()
     return {
         "status": "OK",
         "gemini_ready": bool(os.environ.get("GOOGLE_API_KEY")),
-        "paypal_live_ready": paypal_sdk.is_configured
+        "paypal_live_ready": paypal_sdk.is_configured,
+        "channel3_ready": bool(os.environ.get("CHANNEL3_API_KEY"))
     }
+
+
+@app.get("/api/catalog/search")
+async def search_live_channel3(q: str = "office chair"):
+    """
+    Consulta productos reales en Channel3 API y registra sus precios oficiales
+    en TRUSTED_CATALOG para mantener la validación Anti-Alucinaciones del Shield.
+    """
+    c3_key = os.environ.get("CHANNEL3_API_KEY", "").strip()
+
+    # 1. Si no hay API Key de Channel3 configurada, usa el catálogo semilla de respaldo
+    if not c3_key or "tu_api_key" in c3_key:
+        fallback_items = [
+            {"sku": sku, "name": sku, "price": data["price"], "paypal_email": data["paypal_email"], "source": "LOCAL_FALLBACK"}
+            for sku, data in TRUSTED_CATALOG.items()
+        ]
+        return {"mode": "FALLBACK_CATALOG", "products": fallback_items}
+
+    # 2. Búsqueda real en el Product Graph de Channel3 (100M+ productos)
+    try:
+        client = AsyncChannel3Client(api_key=c3_key, timeout=15.0)
+        response = await client.products.search(query=q, limit=5)
+
+        # Soporta tanto respuesta directa (.products) como Pager (.items / .response.products)
+        raw_products = getattr(response, "products", None) or getattr(response, "items", None)
+        if not raw_products and hasattr(response, "response"):
+            raw_products = getattr(response.response, "products", None)
+        raw_products = raw_products or []
+
+        live_products = []
+        for prod in raw_products:
+            # Extraer el precio real de la primera oferta disponible
+            raw_price = None
+            brand_list = getattr(prod, "brands", None) or []
+            first_brand = getattr(brand_list[0], "name", None) if brand_list else None
+            merchant_name = getattr(prod, "brand_name", None) or first_brand or "verified-retailer"
+
+            if getattr(prod, "offers", None) and len(prod.offers) > 0:
+                offer = prod.offers[0]
+                # Soporta tanto offer.price numérico como objeto Price según versión del SDK
+                raw_price = getattr(offer.price, "price", offer.price)
+                merchant_name = (
+                    getattr(offer, "merchant_name", None)
+                    or getattr(offer, "domain", None)
+                    or merchant_name
+                )
+            elif getattr(prod, "price", None):
+                raw_price = getattr(prod.price, "price", prod.price)
+
+            if not raw_price or float(raw_price) <= 0:
+                continue
+
+            price_usd = round(float(raw_price), 2)
+            sku = str(prod.id)
+            slug = re.sub(r"[^a-z0-9]+", "-", merchant_name.lower()).strip("-") or "merchant"
+            sandbox_payee = f"{slug}@sandbox.paypal.com"
+
+            images_list = getattr(prod, "images", None) or []
+            first_image = getattr(images_list[0], "url", None) if images_list else None
+            image_url = getattr(prod, "image_url", None) or first_image
+
+            # CRÍTICO: Registramos la verdad oficial en memoria del Shield (Anti-Alucinación)
+            TRUSTED_CATALOG[sku] = {
+                "price": price_usd,
+                "paypal_email": sandbox_payee
+            }
+
+            live_products.append({
+                "sku": sku,
+                "name": prod.title,
+                "brand_or_merchant": merchant_name,
+                "price": price_usd,
+                "paypal_email": sandbox_payee,
+                "image_url": image_url,
+                "source": "LIVE_CHANNEL3_API"
+            })
+
+        return {"mode": "LIVE_CHANNEL3_API", "products": live_products}
+
+    except Exception as e:
+        return {"mode": "CHANNEL3_ERROR_FALLBACK", "error": str(e), "products": []}
 
 
 @app.post("/api/policy")

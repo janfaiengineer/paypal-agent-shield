@@ -13,24 +13,17 @@ from ap2_crypto import sign_agent_checkout
 SHIELD_BASE_URL = "http://localhost:8001"
 
 
-def search_catalog_channel3(query: str) -> dict:
+async def search_catalog_channel3(query: str) -> dict:
     """
-    Busca productos disponibles en el catálogo de comercio electrónico verificado (vía Channel3).
+    Busca productos reales en tiempo real usando la API de Channel3 (100M+ productos).
 
     Args:
-        query: Palabra clave del producto a buscar (ej. 'silla', 'monitor', 'laptop', 'teclado', 'todo').
+        query: Producto a buscar en inglés o español (ej. 'ergonomic office chair', '4k monitor', 'mechanical keyboard').
     """
-    catalog = [
-        {"sku": "CHAIR-ERG-01", "name": "Silla de Oficina Ergonómica", "price": 120.00, "merchant_id": "m_office_01", "paypal_email": "office-supply@sandbox.paypal.com"},
-        {"sku": "KEYB-MECH-02", "name": "Teclado Mecánico Inalámbrico", "price": 65.00, "merchant_id": "m_tech_01", "paypal_email": "peripherals@sandbox.paypal.com"},
-        {"sku": "MON-4K-27", "name": "Monitor 4K 27 Pulgadas", "price": 150.00, "merchant_id": "m_tech_02", "paypal_email": "monitors-direct@sandbox.paypal.com"},
-        {"sku": "LAP-PRO-16", "name": "Laptop Developer 16GB RAM", "price": 799.00, "merchant_id": "m_tech_02", "paypal_email": "monitors-direct@sandbox.paypal.com"}
-    ]
-    q = query.lower().strip()
-    if q in ["todo", "todos", "catalogo", "catálogo", ""]:
-        return {"catalog_results": catalog}
-    filtered = [item for item in catalog if q in item["name"].lower() or q in item["sku"].lower()]
-    return {"catalog_results": filtered if filtered else catalog}
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        res = await client.get(f"{SHIELD_BASE_URL}/api/catalog/search", params={"q": query})
+        res.raise_for_status()
+        return res.json()
 
 
 async def get_ag_grid_policy_state() -> dict:
@@ -128,10 +121,11 @@ root_agent = Agent(
 
     FLUJO DE TRABAJO:
     1. Si te piden ver el presupuesto o catálogo, usa `get_ag_grid_policy_state` o `search_catalog_channel3`.
-    2. Cuando te pidan comprar un producto, busca sus datos exactos en `search_catalog_channel3` si no los tienes, y ejecuta inmediatamente `execute_ap2_checkout`.
-    3. Si el usuario pide simular un ataque criptográfico, adulteración o firma inválida, pasa `simulate_tampering=True` a `execute_ap2_checkout`.
-    4. Si el usuario pide simular una alucinación de precio o cambiar el precio manualmente a otro valor, pasa ese precio alterado con `simulate_tampering=False` para demostrar cómo la validación Ground-Truth del Shield lo detiene.
-    5. Resume siempre: ID del mandato AP2, estado de la firma Ed25519, veredicto del Shield / ID de PayPal y saldo restante en AG Grid.
+    2. PROHIBIDO INVENTAR PRODUCTOS O SKUs: Muestra únicamente los productos devueltos por `search_catalog_channel3` incluyendo siempre su `sku`, `price` y `paypal_email` exactos. Si `search_catalog_channel3` devuelve una lista vacía o un error, infórmalo claramente al usuario y NO inventes productos por tu cuenta.
+    3. Cuando te pidan comprar un producto, usa exactamente el `sku`, `name`, `price` y `paypal_email` que devolvió `search_catalog_channel3` (vuelve a llamar a `search_catalog_channel3` si no tienes esos datos exactos en la conversación) y ejecuta `execute_ap2_checkout`.
+    4. Si el usuario pide explícitamente simular un ataque criptográfico, adulteración o firma inválida, pasa `simulate_tampering=True` a `execute_ap2_checkout`.
+    5. Si el usuario pide explícitamente simular una alucinación de precio o SKU (o cambiar el precio manualmente a otro valor), pasa ese valor alterado con `simulate_tampering=False` para demostrar cómo la validación Ground-Truth del Shield lo detiene.
+    6. Resume siempre: ID del mandato AP2, estado de la firma Ed25519, veredicto del Shield / ID de PayPal y saldo restante en AG Grid.
     """,
     tools=[
         search_catalog_channel3,

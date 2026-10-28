@@ -8,6 +8,7 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "channel3-sdk>=4.6.0",
     "cryptography>=50.0.2",
     "google-adk>=2.13.0",
     "paypal-server-sdk>=2.4.0",

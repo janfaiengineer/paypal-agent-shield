@@ -643,13 +643,17 @@
       const res = await fetch("/api/config/status");
       const st = await res.json();
       const badge = document.getElementById("creds-status");
-      if (st.paypal_live_ready && st.gemini_ready) {
-        badge.innerText = "🔑 PayPal Sandbox: LIVE | ADK: READY";
+      const parts = [];
+      parts.push(`PayPal: ${st.paypal_live_ready ? 'LIVE' : 'SIMULATED'}`);
+      parts.push(`ADK: ${st.gemini_ready ? 'READY' : 'NO KEY'}`);
+      parts.push(`Channel3: ${st.channel3_ready ? 'LIVE' : 'FALLBACK'}`);
+      badge.innerText = `🔑 ` + parts.join(" | ");
+      if (st.paypal_live_ready && st.gemini_ready && st.channel3_ready) {
         badge.style.color = "#34d399";
         badge.style.borderColor = "#059669";
       } else {
-        badge.innerText = `🔑 PayPal: ${st.paypal_live_ready ? 'LIVE' : 'SIMULATED'} | ADK: ${st.gemini_ready ? 'READY' : 'NO KEY'}`;
         badge.style.color = "#fbbf24";
+        badge.style.borderColor = "#d97706";
       }
     }
 
@@ -660,11 +664,13 @@
         body: JSON.stringify({
           google_api_key: document.getElementById("cfg-gemini").value,
           paypal_client_id: document.getElementById("cfg-pp-id").value,
-          paypal_client_secret: document.getElementById("cfg-pp-secret").value
+          paypal_client_secret: document.getElementById("cfg-pp-secret").value,
+          channel3_api_key: document.getElementById("cfg-c3-key").value
         })
       });
       document.getElementById("cfg-gemini").value = "";
       document.getElementById("cfg-pp-secret").value = "";
+      document.getElementById("cfg-c3-key").value = "";
       toggleConfigModal();
       await refreshCredsStatus();
     }
@@ -697,7 +703,10 @@
       <input id="cfg-pp-id" type="text" placeholder="Client ID de developer.paypal.com" style="width:100%; margin:6px 0 14px 0; padding:9px; background:#070b14; border:1px solid #334155; color:white; border-radius:6px; font-size:12px;" />
 
       <label style="font-size:11px; color:#cbd5e1; font-weight:600;">PAYPAL_CLIENT_SECRET (Sandbox)</label>
-      <input id="cfg-pp-secret" type="password" placeholder="Client Secret de PayPal Sandbox" style="width:100%; margin:6px 0 18px 0; padding:9px; background:#070b14; border:1px solid #334155; color:white; border-radius:6px; font-size:12px;" />
+      <input id="cfg-pp-secret" type="password" placeholder="Client Secret de PayPal Sandbox" style="width:100%; margin:6px 0 14px 0; padding:9px; background:#070b14; border:1px solid #334155; color:white; border-radius:6px; font-size:12px;" />
+
+      <label style="font-size:11px; color:#cbd5e1; font-weight:600;">CHANNEL3_API_KEY (Product Graph)</label>
+      <input id="cfg-c3-key" type="password" placeholder="c3_live_... (Dejar vacío para conservar actual)" style="width:100%; margin:6px 0 18px 0; padding:9px; background:#070b14; border:1px solid #334155; color:white; border-radius:6px; font-size:12px;" />
 
       <div style="display:flex; justify-content:flex-end; gap:8px;">
         <button onclick="toggleConfigModal()" style="background:transparent; color:#94a3b8; border:1px solid #334155; padding:8px 14px; border-radius:6px; cursor:pointer; font-size:12px;">Cancelar</button>
