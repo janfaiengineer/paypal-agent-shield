@@ -15,7 +15,16 @@ if str(ROOT_DIR) not in sys.path:
 
 from ap2_crypto import sign_agent_checkout
 
-SHIELD_BASE_URL = "http://localhost:8001"
+def _get_shield_base_url() -> str:
+    """Resuelve dinámicamente la URL del servidor Shield tanto en local como en Render."""
+    custom_url = os.getenv("SHIELD_BASE_URL", "").strip()
+    if custom_url:
+        return custom_url.rstrip("/")
+    port = os.getenv("PORT", "8001").strip() or "8001"
+    return f"http://127.0.0.1:{port}"
+
+
+SHIELD_BASE_URL = _get_shield_base_url()
 
 
 async def search_catalog_channel3(query: str) -> dict:
@@ -25,8 +34,9 @@ async def search_catalog_channel3(query: str) -> dict:
     Args:
         query: Producto a buscar en inglés o español (ej. 'ergonomic office chair', '4k monitor', 'mechanical keyboard').
     """
+    base_url = _get_shield_base_url()
     async with httpx.AsyncClient(timeout=20.0) as client:
-        res = await client.get(f"{SHIELD_BASE_URL}/api/catalog/search", params={"q": query})
+        res = await client.get(f"{base_url}/api/catalog/search", params={"q": query})
         res.raise_for_status()
         return res.json()
 
@@ -36,8 +46,9 @@ async def get_ag_grid_policy_state() -> dict:
     Consulta en tiempo real el servidor de PayPal Agent Shield para obtener el presupuesto disponible
     en AG Grid, las llaves públicas Ed25519 y el Hash criptográfico AP2 activo del CFO.
     """
+    base_url = _get_shield_base_url()
     async with httpx.AsyncClient(timeout=5.0) as client:
-        res = await client.get(f"{SHIELD_BASE_URL}/api/state")
+        res = await client.get(f"{base_url}/api/state")
         res.raise_for_status()
         return res.json()["policy"]
 
@@ -60,8 +71,9 @@ async def execute_ap2_checkout(
         merchant_paypal_email: Correo de PayPal del comercio.
         simulate_tampering: Si es True, altera el precio después de firmar con Ed25519 para demostrar cómo el Shield detecta ataques Man-in-the-Middle.
     """
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        state_res = await client.get(f"{SHIELD_BASE_URL}/api/state")
+    base_url = _get_shield_base_url()
+    async with httpx.AsyncClient(timeout=35.0) as client:
+        state_res = await client.get(f"{base_url}/api/state")
         policy = state_res.json()["policy"]
 
         mandate_id = f"ap2_chk_{uuid.uuid4().hex[:8]}"
@@ -93,7 +105,7 @@ async def execute_ap2_checkout(
         }
 
         # 2. Llamada asíncrona al Firewall PayPal Agent Shield
-        chk_res = await client.post(f"{SHIELD_BASE_URL}/api/checkout", json=checkout_payload)
+        chk_res = await client.post(f"{base_url}/api/checkout", json=checkout_payload)
         result = chk_res.json()
 
         if not result.get("authorized"):
@@ -111,6 +123,7 @@ async def execute_ap2_checkout(
             "ed25519_signature_verified": real_signature[:24] + "...",
             "paypal_transaction_id": result.get("paypal_tx_id"),
             "paypal_mode": result.get("paypal_mode"),
+            "render_workflow_engine": result.get("workflow_engine", "LOCAL_INLINE"),
             "ap2_cryptographic_proof": result.get("ap2_proof")[:20] + "...",
             "ag_grid_remaining_usd": result.get("remaining_usd")
         }

@@ -20,6 +20,11 @@ except ImportError:
     except ImportError:
         AsyncChannel3Client = None
 
+try:
+    from render import RenderAsync
+except ImportError:
+    RenderAsync = None
+
 # Carga variables de entorno (.env) para Google ADK (GOOGLE_API_KEY) y PayPal
 load_dotenv()
 
@@ -96,6 +101,8 @@ class CredentialsConfig(BaseModel):
     paypal_client_id: str = ""
     paypal_client_secret: str = ""
     channel3_api_key: str = ""
+    render_api_key: str = ""
+    render_workflow_slug: str = ""
 
 
 _init_sig = sign_cfo_policy("pol_aggrid_001", "procurement-01", 200.00, "OFFICE_AND_TECH")
@@ -161,17 +168,20 @@ async def get_config_status():
     """Devuelve si las llaves ya están activas (sin exponer los secretos al navegador)."""
     has_gemini = _has_valid_key("GOOGLE_API_KEY") or _has_valid_key("GEMINI_API_KEY")
     has_channel3 = _has_valid_key("CHANNEL3_API_KEY")
+    has_render_wf = _has_valid_key("RENDER_API_KEY") and RenderAsync is not None
     return {
         "gemini_ready": has_gemini,
         "gemini_model": str(root_agent.model),
         "paypal_live_ready": paypal_sdk.is_configured,
         "channel3_ready": has_channel3,
+        "render_workflow_ready": has_render_wf,
+        "render_workflow_slug": os.getenv("RENDER_WORKFLOW_SLUG", "paypal-shield-workflow"),
     }
 
 
 @app.post("/api/config")
 async def update_runtime_config(cfg: CredentialsConfig):
-    """Actualiza en memoria las credenciales de Google ADK, PayPal APIMatic SDK y Channel3."""
+    """Actualiza en memoria las credenciales de Google ADK, PayPal APIMatic SDK, Channel3 y Render Workflows."""
     if cfg.google_api_key.strip():
         os.environ["GOOGLE_API_KEY"] = cfg.google_api_key.strip()
 
@@ -180,18 +190,32 @@ async def update_runtime_config(cfg: CredentialsConfig):
         root_agent.model = cfg.gemini_model.strip()
 
     if cfg.paypal_client_id.strip() and cfg.paypal_client_secret.strip():
+        os.environ["PAYPAL_CLIENT_ID"] = cfg.paypal_client_id.strip()
+        os.environ["PAYPAL_CLIENT_SECRET"] = cfg.paypal_client_secret.strip()
         paypal_sdk.configure_credentials(cfg.paypal_client_id, cfg.paypal_client_secret)
 
     if cfg.channel3_api_key.strip():
         os.environ["CHANNEL3_API_KEY"] = cfg.channel3_api_key.strip()
 
+    if cfg.render_api_key.strip():
+        os.environ["RENDER_API_KEY"] = cfg.render_api_key.strip()
+
+    if cfg.render_workflow_slug.strip():
+        os.environ["RENDER_WORKFLOW_SLUG"] = cfg.render_workflow_slug.strip()
+
+    has_render_wf = _has_valid_key("RENDER_API_KEY") and RenderAsync is not None
     state["audit_log"].insert(0, {
         "timestamp": now_str(),
         "mandate_id": "SYS-CFG",
         "item": "Runtime Credentials Updated",
         "amount": 0.0,
         "status": "POLICY_SIGNED",
-        "details": f"Model: {root_agent.model} | Gemini Key: {'ACTIVE' if os.environ.get('GOOGLE_API_KEY') else 'MISSING'} | Channel3 Key: {'ACTIVE' if os.environ.get('CHANNEL3_API_KEY') else 'MISSING'} | PayPal Mode: {'LIVE SANDBOX' if paypal_sdk.is_configured else 'SIMULATED'}"
+        "details": (
+            f"Model: {root_agent.model} | Gemini Key: {'ACTIVE' if os.environ.get('GOOGLE_API_KEY') else 'MISSING'} | "
+            f"Channel3: {'ACTIVE' if os.environ.get('CHANNEL3_API_KEY') else 'MISSING'} | "
+            f"PayPal: {'LIVE SANDBOX' if paypal_sdk.is_configured else 'SIMULATED'} | "
+            f"Render Workflows: {'DISTRIBUTED' if has_render_wf else 'LOCAL_FALLBACK'}"
+        )
     })
     await broadcast_state()
     return {
@@ -199,7 +223,8 @@ async def update_runtime_config(cfg: CredentialsConfig):
         "gemini_ready": bool(os.environ.get("GOOGLE_API_KEY")),
         "gemini_model": str(root_agent.model),
         "paypal_live_ready": paypal_sdk.is_configured,
-        "channel3_ready": bool(os.environ.get("CHANNEL3_API_KEY"))
+        "channel3_ready": bool(os.environ.get("CHANNEL3_API_KEY")),
+        "render_workflow_ready": has_render_wf,
     }
 
 
@@ -372,21 +397,54 @@ async def process_ap2_checkout(req: CheckoutRequest):
         await broadcast_state()
         return {"authorized": False, "error": reason, "remaining_usd": p["remaining_usd"]}
 
-    # 6. Liquidar en PayPal Sandbox vía APIMatic SDK
-    try:
-        pp_settlement = await asyncio.to_thread(
-            paypal_sdk.execute_ap2_settlement,
-            mandate_id=req.mandate_id,
-            parent_policy_hash=expected_hash,
-            product_name=req.product_name,
-            amount_usd=req.total_amount,
-            merchant_paypal_email=req.merchant_paypal_email,
-        )
-    except Exception as e:
-        reason = f"PAYPAL_API_ERROR: {str(e)}"
-        state["audit_log"].insert(0, {"timestamp": now_str(), "mandate_id": req.mandate_id, "item": req.product_name, "amount": req.total_amount, "status": "BLOCKED_BY_SHIELD", "details": reason})
-        await broadcast_state()
-        return {"authorized": False, "error": reason, "remaining_usd": p["remaining_usd"]}
+    # 6. Liquidar en PayPal Sandbox vía Render Workflows (o ejecución local como fallback)
+    workflow_engine_note = "LOCAL_INLINE"
+    pp_settlement = None
+
+    if _has_valid_key("RENDER_API_KEY") and RenderAsync is not None:
+        workflow_slug = os.getenv("RENDER_WORKFLOW_SLUG", "paypal-shield-workflow").strip() or "paypal-shield-workflow"
+        task_slug = f"{workflow_slug}/orchestrate_ap2_checkout_workflow"
+        workflow_payload = {
+            "mandate_id": req.mandate_id,
+            "agent_id": req.agent_id,
+            "parent_policy_hash": expected_hash,
+            "sku": req.sku,
+            "product_name": req.product_name,
+            "total_amount": req.total_amount,
+            "merchant_paypal_email": req.merchant_paypal_email,
+            "agent_signature": req.agent_signature,
+            "paypal_client_id": paypal_sdk.client_id,
+            "paypal_client_secret": paypal_sdk.client_secret,
+        }
+        try:
+            render_client = RenderAsync(token=os.environ.get("RENDER_API_KEY", "").strip())
+            task_run = await render_client.workflows.run_task(task_slug, [workflow_payload])
+            wf_result = task_run.results[0] if getattr(task_run, "results", None) else {}
+            if not wf_result.get("authorized"):
+                reason = wf_result.get("error", "RENDER_WORKFLOW_REJECTED")
+                state["audit_log"].insert(0, {"timestamp": now_str(), "mandate_id": req.mandate_id, "item": req.product_name, "amount": req.total_amount, "status": "BLOCKED_BY_SHIELD", "details": reason})
+                await broadcast_state()
+                return {"authorized": False, "error": reason, "remaining_usd": p["remaining_usd"]}
+            pp_settlement = wf_result.get("settlement")
+            workflow_engine_note = f"RENDER_WORKFLOW ({task_run.id})"
+        except Exception as wf_err:
+            workflow_engine_note = f"LOCAL_FALLBACK (WF: {str(wf_err)[:36]})"
+
+    if pp_settlement is None:
+        try:
+            pp_settlement = await asyncio.to_thread(
+                paypal_sdk.execute_ap2_settlement,
+                mandate_id=req.mandate_id,
+                parent_policy_hash=expected_hash,
+                product_name=req.product_name,
+                amount_usd=req.total_amount,
+                merchant_paypal_email=req.merchant_paypal_email,
+            )
+        except Exception as e:
+            reason = f"PAYPAL_API_ERROR: {str(e)}"
+            state["audit_log"].insert(0, {"timestamp": now_str(), "mandate_id": req.mandate_id, "item": req.product_name, "amount": req.total_amount, "status": "BLOCKED_BY_SHIELD", "details": reason})
+            await broadcast_state()
+            return {"authorized": False, "error": reason, "remaining_usd": p["remaining_usd"]}
 
     p["remaining_usd"] -= req.total_amount
     pp_tx_id = pp_settlement["paypal_order_id"]
@@ -398,13 +456,14 @@ async def process_ap2_checkout(req: CheckoutRequest):
         "item": req.product_name,
         "amount": req.total_amount,
         "status": "PAYPAL_COMPLETED",
-        "details": f"PayPal Order: {pp_tx_id} | Ed25519 Verified | {pp_mode}"
+        "details": f"PayPal Order: {pp_tx_id} | Ed25519 Verified | {workflow_engine_note} | {pp_mode}"
     })
     await broadcast_state()
     return {
         "authorized": True,
         "paypal_tx_id": pp_tx_id,
         "paypal_mode": pp_mode,
+        "workflow_engine": workflow_engine_note,
         "remaining_usd": p["remaining_usd"],
         "ap2_proof": expected_hash
     }

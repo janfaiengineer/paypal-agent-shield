@@ -10,14 +10,18 @@ requires-python = ">=3.12"
 dependencies = [
     "channel3-sdk>=4.6.0",
     "cryptography>=50.0.2",
+    "fastapi>=0.162.0",
     "google-adk>=2.13.0",
+    "httpx>=0.28.1",
     "paypal-server-sdk>=2.4.0",
     "python-dotenv>=1.2.4",
+    "render>=1.0.1",
+    "uvicorn[standard]>=0.54.0",
 ]
 
 [project.scripts]
 hackaton-paypal = "hackaton_paypal:main"
 
 [build-system]
-requires = ["uv_build>=0.13.5,<0.14.0"]
+requires = ["uv_build>=0.12.0,<0.14.0"]
 build-backend = "uv_build"

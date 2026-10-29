@@ -1,0 +1,45 @@
+services:
+  # 1. Consola Web Unificada (FastAPI + AG Grid + Google ADK Agent)
+  - type: web
+    name: paypal-agent-shield-web
+    runtime: python
+    region: oregon
+    plan: starter
+    buildCommand: uv sync
+    startCommand: uv run uvicorn shield_server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: UV_VERSION
+        value: 0.13.5
+      - key: GEMINI_MODEL
+        value: gemini-3.8-flash
+      - key: RENDER_WORKFLOW_SLUG
+        value: paypal-shield-workflow
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: CHANNEL3_API_KEY
+        sync: false
+      - key: RENDER_API_KEY
+        sync: false
+
+  # 2. Motor Distribuido Render Workflows (Requisito oficial del Hackatón)
+  - type: workflow
+    name: paypal-shield-workflow
+    runtime: python
+    region: oregon
+    buildCommand: uv sync
+    startCommand: uv run python shield_workflows.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: UV_VERSION
+        value: 0.13.5
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false

@@ -365,6 +365,7 @@
       <span class="tag">Google ADK</span>
       <span class="tag">AP2 Ed25519</span>
       <span class="tag">PayPal APIMatic SDK</span>
+      <span class="tag">Render Workflows</span>
       <span class="tag">AG Grid</span>
     </div>
     <div style="display:flex; align-items:center; gap:10px;">
@@ -676,6 +677,7 @@
       parts.push(`PayPal: ${st.paypal_live_ready ? 'LIVE' : 'SIMULATED'}`);
       parts.push(`ADK: ${st.gemini_ready ? 'READY' : 'NO KEY'}`);
       parts.push(`Channel3: ${st.channel3_ready ? 'LIVE' : 'FALLBACK'}`);
+      parts.push(`Render WF: ${st.render_workflow_ready ? 'LIVE' : 'LOCAL'}`);
       badge.innerText = `🔑 ` + parts.join(" | ");
       if (st.paypal_live_ready && st.gemini_ready && st.channel3_ready) {
         badge.style.color = "#34d399";
@@ -687,6 +689,7 @@
     }
 
     async function saveCredentials() {
+      const renderKeyInput = document.getElementById("cfg-render-key");
       await fetch("/api/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -694,12 +697,14 @@
           google_api_key: document.getElementById("cfg-gemini").value,
           paypal_client_id: document.getElementById("cfg-pp-id").value,
           paypal_client_secret: document.getElementById("cfg-pp-secret").value,
-          channel3_api_key: document.getElementById("cfg-c3-key").value
+          channel3_api_key: document.getElementById("cfg-c3-key").value,
+          render_api_key: renderKeyInput ? renderKeyInput.value : ""
         })
       });
       document.getElementById("cfg-gemini").value = "";
       document.getElementById("cfg-pp-secret").value = "";
       document.getElementById("cfg-c3-key").value = "";
+      if (renderKeyInput) renderKeyInput.value = "";
       toggleConfigModal();
       await refreshCredsStatus();
     }
@@ -761,7 +766,7 @@
         </div>
       </div>
 
-      <div style="margin-bottom:18px;">
+      <div style="margin-bottom:14px;">
         <label style="font-size:11px; color:#cbd5e1; font-weight:600;">CHANNEL3_API_KEY (Product Graph)</label>
         <div style="position:relative; margin-top:6px;">
           <input id="cfg-c3-key" type="password" placeholder="c3_live_... (Dejar vacío para conservar actual)" style="width:100%; padding:9px 36px 9px 9px; background:#070b14; border:1px solid #334155; color:white; border-radius:6px; font-size:12px;" />
@@ -770,6 +775,17 @@
           </button>
         </div>
         <a href="https://trychannel3.com/dashboard/api" target="_blank" rel="noopener noreferrer" style="display:inline-block; margin-top:4px; font-size:11px; color:#38bdf8; text-decoration:none;">🔗 Obtener API Key en Channel3 (trychannel3.com/dashboard/api) ↗</a>
+      </div>
+
+      <div style="margin-bottom:18px;">
+        <label style="font-size:11px; color:#cbd5e1; font-weight:600;">RENDER_API_KEY (Render Workflows Orchestration)</label>
+        <div style="position:relative; margin-top:6px;">
+          <input id="cfg-render-key" type="password" placeholder="rnd_... (Opcional - Activa Render Workflows remoto)" style="width:100%; padding:9px 36px 9px 9px; background:#070b14; border:1px solid #334155; color:white; border-radius:6px; font-size:12px;" />
+          <button type="button" onclick="toggleSecretVisibility('cfg-render-key', this)" title="Mostrar credencial" style="position:absolute; right:6px; top:50%; transform:translateY(-50%); background:transparent; border:none; color:#94a3b8; cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <a href="https://dashboard.render.com/u/settings#api-keys" target="_blank" rel="noopener noreferrer" style="display:inline-block; margin-top:4px; font-size:11px; color:#38bdf8; text-decoration:none;">🔗 Obtener API Key en Render Dashboard ↗</a>
       </div>
 
       <div style="display:flex; justify-content:flex-end; gap:8px;">
