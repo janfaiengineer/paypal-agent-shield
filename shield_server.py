@@ -92,6 +92,7 @@ class ChatRequest(BaseModel):
 
 class CredentialsConfig(BaseModel):
     google_api_key: str = ""
+    gemini_model: str = ""
     paypal_client_id: str = ""
     paypal_client_secret: str = ""
     channel3_api_key: str = ""
@@ -162,6 +163,7 @@ async def get_config_status():
     has_channel3 = _has_valid_key("CHANNEL3_API_KEY")
     return {
         "gemini_ready": has_gemini,
+        "gemini_model": str(root_agent.model),
         "paypal_live_ready": paypal_sdk.is_configured,
         "channel3_ready": has_channel3,
     }
@@ -172,6 +174,10 @@ async def update_runtime_config(cfg: CredentialsConfig):
     """Actualiza en memoria las credenciales de Google ADK, PayPal APIMatic SDK y Channel3."""
     if cfg.google_api_key.strip():
         os.environ["GOOGLE_API_KEY"] = cfg.google_api_key.strip()
+
+    if cfg.gemini_model.strip():
+        os.environ["GEMINI_MODEL"] = cfg.gemini_model.strip()
+        root_agent.model = cfg.gemini_model.strip()
 
     if cfg.paypal_client_id.strip() and cfg.paypal_client_secret.strip():
         paypal_sdk.configure_credentials(cfg.paypal_client_id, cfg.paypal_client_secret)
@@ -185,12 +191,13 @@ async def update_runtime_config(cfg: CredentialsConfig):
         "item": "Runtime Credentials Updated",
         "amount": 0.0,
         "status": "POLICY_SIGNED",
-        "details": f"Gemini Key: {'ACTIVE' if os.environ.get('GOOGLE_API_KEY') else 'MISSING'} | Channel3 Key: {'ACTIVE' if os.environ.get('CHANNEL3_API_KEY') else 'MISSING'} | PayPal Mode: {'LIVE SANDBOX' if paypal_sdk.is_configured else 'SIMULATED'}"
+        "details": f"Model: {root_agent.model} | Gemini Key: {'ACTIVE' if os.environ.get('GOOGLE_API_KEY') else 'MISSING'} | Channel3 Key: {'ACTIVE' if os.environ.get('CHANNEL3_API_KEY') else 'MISSING'} | PayPal Mode: {'LIVE SANDBOX' if paypal_sdk.is_configured else 'SIMULATED'}"
     })
     await broadcast_state()
     return {
         "status": "OK",
         "gemini_ready": bool(os.environ.get("GOOGLE_API_KEY")),
+        "gemini_model": str(root_agent.model),
         "paypal_live_ready": paypal_sdk.is_configured,
         "channel3_ready": bool(os.environ.get("CHANNEL3_API_KEY"))
     }

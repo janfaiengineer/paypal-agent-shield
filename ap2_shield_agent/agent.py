@@ -1,8 +1,13 @@
+import os
 import sys
 from pathlib import Path
 import uuid
 import httpx
+from dotenv import load_dotenv
 from google.adk.agents import Agent
+
+load_dotenv()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
@@ -113,7 +118,7 @@ async def execute_ap2_checkout(
 
 root_agent = Agent(
     name="paypal_ap2_procurement_agent",
-    model="gemini-3.5-flash",
+    model=GEMINI_MODEL,
     description="Agente de compras autónomo gobernado por criptografía Ed25519 (AP2), AG Grid y PayPal Agent Shield.",
     instruction="""
     Eres el Agente de Compras Autónomo corporativo operando con Google ADK, el protocolo criptográfico AP2 (Ed25519) y PayPal Agent Shield.
