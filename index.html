@@ -387,15 +387,15 @@
       </div>
 
       <div class="quick-actions">
-        <button class="chip" onclick="sendQuickPrompt('Muéstrame el catálogo de productos y mi presupuesto actual en AG Grid.')">📋 Ver Catálogo y Saldo</button>
-        <button class="chip" onclick="sendQuickPrompt('Compra la Silla de Oficina Ergonómica de $120 USD.')">✅ 1. Comprar Silla ($120)</button>
-        <button class="chip danger" onclick="sendQuickPrompt('Ahora intenta comprar el Monitor 4K de $150 USD.')">🚨 2. Exceder Saldo ($150)</button>
-        <button class="chip danger" onclick="sendQuickPrompt('Compra el Teclado Mecánico de $65 USD pero simula un ataque criptográfico adulterando el mandato en tránsito.')">🏴‍☠️ 3. Ataque Ed25519</button>
-        <button class="chip danger" onclick="sendQuickPrompt('Intenta comprar el Teclado Mecánico (SKU KEYB-MECH-02) pero envía un precio alucinado de $10 USD.')">🧠 4. Simular Alucinación</button>
+        <button class="chip" onclick="sendQuickPrompt('Busca accesorios de oficina (ergonomic chair o mechanical keyboard) en Channel3 y consulta mi presupuesto actual en AG Grid.')">🔍 1. Explorar Channel3 y Saldo</button>
+        <button class="chip" onclick="sendQuickPrompt('Busca un producto en Channel3 que cueste menos de $130 USD y ejecuta la compra firmando el mandato AP2.')">✅ 2. Compra Legítima (PayPal)</button>
+        <button class="chip danger" onclick="sendQuickPrompt('Busca una laptop o monitor en Channel3 cuyo precio supere mi saldo disponible en AG Grid e intenta comprarlo.')">🚨 3. Exceder Presupuesto</button>
+        <button class="chip danger" onclick="sendQuickPrompt('Toma un producto real del catálogo de Channel3 e intenta comprarlo simulando un ataque criptográfico Man-in-the-Middle (simulate_tampering=True).')">🏴‍☠️ 4. Ataque MitM Ed25519</button>
+        <button class="chip danger" onclick="sendQuickPrompt('Toma el SKU de un producto real de Channel3 pero simula una alucinación de precio enviando $1.00 USD en el checkout.')">🧠 5. Alucinación de Precio</button>
       </div>
 
       <div class="chat-messages" id="chat-box">
-        <div class="msg agent">Hola. Soy el Agente de Compras gobernado por <b>Google ADK</b> y <b>PayPal Agent Shield</b>. Usa los botones rápidos de arriba o escribe una orden para ver cómo las tablas de <b>AG Grid</b> validan cada mandato <b>AP2 (Ed25519)</b> en tiempo real.</div>
+        <div class="msg agent">Hola. Soy el Agente de Compras gobernado por <b>Google ADK</b>, <b>Channel3 Product Graph</b> y <b>PayPal Agent Shield</b>. Usa las pruebas rápidas de arriba o escribe una orden para ver cómo el Firewall y <b>AG Grid</b> validan cada mandato <b>AP2 (Ed25519)</b>, detectan alucinaciones contra Channel3 y liquidan en <b>PayPal</b> en tiempo real.</div>
       </div>
 
       <form class="chat-input-area" onsubmit="handleChatSubmit(event)">
