@@ -150,11 +150,16 @@ async def get_state():
     return {"policy": p, "audit_log": state["audit_log"]}
 
 
+def _has_valid_key(env_name: str) -> bool:
+    val = os.environ.get(env_name, "").strip()
+    return bool(val) and "tu_api_key" not in val.lower()
+
+
 @app.get("/api/config/status")
 async def get_config_status():
     """Devuelve si las llaves ya están activas (sin exponer los secretos al navegador)."""
-    has_gemini = bool(os.environ.get("GOOGLE_API_KEY"))
-    has_channel3 = bool(os.environ.get("CHANNEL3_API_KEY"))
+    has_gemini = _has_valid_key("GOOGLE_API_KEY") or _has_valid_key("GEMINI_API_KEY")
+    has_channel3 = _has_valid_key("CHANNEL3_API_KEY")
     return {
         "gemini_ready": has_gemini,
         "paypal_live_ready": paypal_sdk.is_configured,
@@ -401,6 +406,16 @@ async def process_ap2_checkout(req: CheckoutRequest):
 @app.post("/api/chat")
 async def chat_endpoint(req: ChatRequest):
     """Ejecuta el agente de Google ADK y devuelve los trazos de herramientas + respuesta."""
+    if not (_has_valid_key("GOOGLE_API_KEY") or _has_valid_key("GEMINI_API_KEY")):
+        return {
+            "reply": (
+                "🔑 **API Key de Gemini no configurada**\n\n"
+                "No se encontró una `GOOGLE_API_KEY` activa. Haz clic en el botón **🔑 API Keys** "
+                "en la barra superior para ingresarla en caliente o agrégala en tu archivo `.env`."
+            ),
+            "tools": [],
+        }
+
     session = await session_service.get_session(
         app_name=APP_NAME, user_id=USER_ID, session_id=req.session_id
     )
@@ -413,13 +428,50 @@ async def chat_endpoint(req: ChatRequest):
     tools_called = []
     final_reply = ""
 
-    async for event in adk_runner.run_async(
-        user_id=USER_ID, session_id=req.session_id, new_message=user_msg
-    ):
-        for fn in event.get_function_calls():
-            tools_called.append(fn.name)
-        if event.is_final_response() and event.content and event.content.parts:
-            final_reply = "".join(part.text or "" for part in event.content.parts)
+    try:
+        async for event in adk_runner.run_async(
+            user_id=USER_ID, session_id=req.session_id, new_message=user_msg
+        ):
+            for fn in event.get_function_calls():
+                tools_called.append(fn.name)
+            if event.is_final_response() and event.content and event.content.parts:
+                final_reply = "".join(part.text or "" for part in event.content.parts)
+    except Exception as e:
+        err_str = str(e)
+        err_lower = err_str.lower()
+
+        if any(
+            k in err_lower
+            for k in ("429", "resource_exhausted", "quota", "rate limit", "too many requests", "token")
+        ):
+            return {
+                "reply": (
+                    "⚠️ **Límite de tokens / cuota de Gemini alcanzado (HTTP 429)**\n\n"
+                    "Se ha excedido el límite de peticiones o tokens por minuto de tu cuenta de Google Gemini API. "
+                    "Por favor espera unos segundos antes de enviar otro mensaje o cambia tu `GOOGLE_API_KEY` en **🔑 API Keys**.\n\n"
+                    f"`Detalle: {err_str}`"
+                ),
+                "tools": tools_called,
+            }
+
+        if any(
+            k in err_lower
+            for k in ("api_key_invalid", "api key not valid", "unauthenticated", "permission_denied", "missing key", "401", "403")
+        ):
+            return {
+                "reply": (
+                    "🔑 **API Key de Gemini inválida o sin permisos**\n\n"
+                    "La llave `GOOGLE_API_KEY` configurada fue rechazada por Google Gemini API. "
+                    "Verifica o actualiza tu llave desde el botón **🔑 API Keys**.\n\n"
+                    f"`Detalle: {err_str}`"
+                ),
+                "tools": tools_called,
+            }
+
+        return {
+            "reply": f"❌ **Error ejecutando el agente ADK:**\n\n`{err_str}`",
+            "tools": tools_called,
+        }
 
     return {
         "reply": final_reply or "Operación procesada.",
