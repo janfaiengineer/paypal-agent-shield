@@ -29,20 +29,47 @@ const darkGridTheme = themeQuartz.withPart(colorSchemeDark).withParams({
   borderColor: '#334155',
 });
 
-const darkStudioTheme = studioTheme.withParams({
-  backgroundColor: '#0f172a',
-  textColor: '#f8fafc',
-  borderColor: '#334155',
-  studioCanvasBackgroundColor: '#0b1120',
-  studioWidgetBackgroundColor: '#0f172a',
-  studioWidgetTitleTextColor: '#f8fafc',
-  studioWidgetSubtitleTextColor: '#94a3b8',
-  studioWidgetCaptionTextColor: '#94a3b8',
-  chartTextColor: '#f8fafc',
-  chartSubtleTextColor: '#94a3b8',
-  chartAxisLineColor: '#475569',
-  chartGridLineColor: '#1e293b',
-});
+const darkStudioTheme = studioTheme
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  .withPart(colorSchemeDark as any)
+  .withParams({
+    browserColorScheme: 'dark',
+    gridBrowserColorScheme: 'dark',
+    accentColor: '#38bdf8',
+    gridAccentColor: '#38bdf8',
+    backgroundColor: '#0f172a',
+    foregroundColor: '#ffffff',
+    textColor: '#f8fafc',
+    subtleTextColor: '#cbd5e1',
+    iconColor: '#f1f5f9',
+    gridIconColor: '#f1f5f9',
+    borderColor: '#334155',
+    studioWrapperBackgroundColor: '#090d16',
+    studioCanvasBackgroundColor: '#0b1120',
+    studioPanelContainerBackgroundColor: '#0f172a',
+    studioPanelGroupBackgroundColor: '#1e293b',
+    studioPanelGroupTitleBarTextColor: '#ffffff',
+    studioFormLabelColor: '#e2e8f0',
+    studioWidgetBackgroundColor: '#131c31',
+    studioWidgetTitleTextColor: '#ffffff',
+    studioWidgetSubtitleTextColor: '#cbd5e1',
+    studioWidgetCaptionTextColor: '#cbd5e1',
+    studioWidgetToolbarBackgroundColor: '#1e293b',
+    studioWidgetToolbarButtonColor: '#f8fafc',
+    gridHeaderBackgroundColor: '#1e293b',
+    gridHeaderTextColor: '#38bdf8',
+    gridDataBackgroundColor: '#0f172a',
+    gridOddRowBackgroundColor: '#131c31',
+    gridCellTextColor: '#f8fafc',
+    menuBackgroundColor: '#1e293b',
+    menuTextColor: '#f8fafc',
+    tooltipBackgroundColor: '#1e293b',
+    tooltipTextColor: '#f8fafc',
+    chartTextColor: '#f8fafc',
+    chartSubtleTextColor: '#cbd5e1',
+    chartAxisLineColor: '#64748b',
+    chartGridLineColor: '#1e293b',
+  });
 
 const initialStudioState: AgReportState = {
   selectedPageId: 'cfo-ap2-analytics',
@@ -54,6 +81,7 @@ const initialStudioState: AgReportState = {
           type: 'value',
           format: {
             title: { text: 'Volumen Total Evaluado (USD)', enabled: true },
+            style: { color: '#38bdf8' },
           },
           dataMapping: {
             value: [{ id: 'amount_usd', aggregation: 'sum' }],
@@ -63,6 +91,7 @@ const initialStudioState: AgReportState = {
           type: 'value',
           format: {
             title: { text: 'Mandatos AP2 Auditados', enabled: true },
+            style: { color: '#34d399' },
           },
           dataMapping: {
             value: [{ id: 'mandate_id', aggregation: 'count' }],
@@ -72,6 +101,7 @@ const initialStudioState: AgReportState = {
           type: 'value',
           format: {
             title: { text: 'Risk Score Promedio (Shield)', enabled: true },
+            style: { color: '#fbbf24' },
           },
           dataMapping: {
             value: [{ id: 'risk_score', aggregation: 'avg' }],
@@ -536,7 +566,7 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({ policy, auditL
               ✨ Arrastra campos, crea Pivot Grids, gráficos de barras/dona y cruza filtros en vivo
             </span>
           </div>
-          <div className="studio-container-wrapper">
+          <div className="studio-container-wrapper" data-ag-theme-mode="dark">
             <AgStudio
               theme={darkStudioTheme}
               data={studioData}
