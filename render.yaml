@@ -5,7 +5,7 @@ services:
     runtime: python
     region: oregon
     plan: starter
-    buildCommand: uv sync
+    buildCommand: uv sync && (npm --prefix frontend ci && npm --prefix frontend run build || true)
     startCommand: uv run uvicorn shield_server:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
@@ -30,8 +30,11 @@ services:
   # 2. Motor Distribuido Render Workflows (Requisito oficial del Hackatón)
   - type: workflow
     name: paypal-shield-workflow
+    slug: paypal-shield-workflow
     runtime: python
     region: oregon
+    repo: https://github.com/janfaiengineer/paypal-agent-shield
+    branch: main
     buildCommand: uv sync
     startCommand: uv run python shield_workflows.py
     envVars:

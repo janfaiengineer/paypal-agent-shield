@@ -9,6 +9,7 @@ from typing import List
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -146,8 +147,17 @@ async def broadcast_state():
         await q.put(snapshot)
 
 
+FRONTEND_DIST_DIR = Path(__file__).resolve().parent / "frontend" / "dist"
+FRONTEND_ASSETS_DIR = FRONTEND_DIST_DIR / "assets"
+if FRONTEND_ASSETS_DIR.is_dir():
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_ASSETS_DIR)), name="assets")
+
+
 @app.get("/", response_class=HTMLResponse)
 async def serve_dashboard():
+    react_index = FRONTEND_DIST_DIR / "index.html"
+    if react_index.is_file():
+        return react_index.read_text(encoding="utf-8")
     return Path("index.html").read_text(encoding="utf-8")
 
 
