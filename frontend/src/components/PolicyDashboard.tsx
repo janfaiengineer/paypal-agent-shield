@@ -77,85 +77,111 @@ const initialStudioState: AgReportState = {
     {
       id: 'cfo-ap2-analytics',
       widgets: {
-        'kpi-total-volume': {
+        'kpi-settled-usd': {
           type: 'value',
           format: {
-            title: { text: 'Volumen Total Evaluado (USD)', enabled: true },
-            style: { color: '#38bdf8' },
+            title: { text: 'Total Liquidado en PayPal (USD)', enabled: true },
+            style: { color: '#34d399' },
           },
           dataMapping: {
-            value: [{ id: 'amount_usd', aggregation: 'sum' }],
+            value: [{ id: 'settled_usd', aggregation: 'sum' }],
+          },
+        },
+        'kpi-blocked-usd': {
+          type: 'value',
+          format: {
+            title: { text: 'Capital Protegido / Bloqueado (USD)', enabled: true },
+            style: { color: '#f87171' },
+          },
+          dataMapping: {
+            value: [{ id: 'blocked_usd', aggregation: 'sum' }],
           },
         },
         'kpi-mandates-count': {
           type: 'value',
           format: {
-            title: { text: 'Mandatos AP2 Auditados', enabled: true },
-            style: { color: '#34d399' },
+            title: { text: 'Eventos Auditados en Sesión', enabled: true },
+            style: { color: '#38bdf8' },
           },
           dataMapping: {
             value: [{ id: 'mandate_id', aggregation: 'count' }],
           },
         },
-        'kpi-avg-risk': {
-          type: 'value',
-          format: {
-            title: { text: 'Risk Score Promedio (Shield)', enabled: true },
-            style: { color: '#fbbf24' },
-          },
-          dataMapping: {
-            value: [{ id: 'risk_score', aggregation: 'avg' }],
-          },
-        },
-        'chart-verdict-volume': {
+        'chart-decision-volume': {
           type: 'bar-chart-grouped',
           format: {
-            title: { text: 'Volumen USD por Veredicto del Firewall AP2', enabled: true },
+            title: { text: 'Flujo Financiero: Pagado vs Bloqueado (USD)', enabled: true },
           },
           dataMapping: {
-            categoryKey: [{ id: 'status' }],
-            valueKey: [{ id: 'amount_usd', aggregation: 'sum' }],
+            categoryKey: [{ id: 'decision_type' }],
+            valueKey: [{ id: 'tx_amount_usd', aggregation: 'sum' }],
           },
         },
-        'chart-category-donut': {
+        'chart-layer-donut': {
           type: 'donut-chart',
           format: {
-            title: { text: 'Exposición por Vector / Categoría', enabled: true },
+            title: { text: 'Eventos por Capa de Seguridad AP2', enabled: true },
           },
           dataMapping: {
-            categoryKey: [{ id: 'category' }],
-            valueKey: [{ id: 'amount_usd', aggregation: 'sum' }],
+            categoryKey: [{ id: 'control_layer' }],
+            valueKey: [{ id: 'mandate_id', aggregation: 'count' }],
           },
         },
         'studio-audit-grid': {
           type: 'grid',
           format: {
-            title: { text: 'Tabla Analítica AP2 & PayPal Sandbox (AG Studio)', enabled: true },
+            title: { text: 'Desglose de Transacciones Reales (AG Studio)', enabled: true },
           },
           dataMapping: {
             cols: [
               { id: 'timestamp' },
               { id: 'mandate_id' },
               { id: 'item' },
-              { id: 'category' },
-              { id: 'status' },
-              { id: 'amount_usd', aggregation: 'sum' },
-              { id: 'risk_score', aggregation: 'avg' },
+              { id: 'decision_type' },
+              { id: 'control_layer' },
+              { id: 'settled_usd', aggregation: 'sum' },
+              { id: 'blocked_usd', aggregation: 'sum' },
             ],
           },
         },
       },
       widgetLayout: {
-        'kpi-total-volume': { xTrack: 0, yTrack: 0, xSpan: 8, ySpan: 6 },
-        'kpi-mandates-count': { xTrack: 8, yTrack: 0, xSpan: 8, ySpan: 6 },
-        'kpi-avg-risk': { xTrack: 16, yTrack: 0, xSpan: 8, ySpan: 6 },
-        'chart-verdict-volume': { xTrack: 0, yTrack: 6, xSpan: 12, ySpan: 13 },
-        'chart-category-donut': { xTrack: 12, yTrack: 6, xSpan: 12, ySpan: 13 },
+        'kpi-settled-usd': { xTrack: 0, yTrack: 0, xSpan: 8, ySpan: 6 },
+        'kpi-blocked-usd': { xTrack: 8, yTrack: 0, xSpan: 8, ySpan: 6 },
+        'kpi-mandates-count': { xTrack: 16, yTrack: 0, xSpan: 8, ySpan: 6 },
+        'chart-decision-volume': { xTrack: 0, yTrack: 6, xSpan: 12, ySpan: 13 },
+        'chart-layer-donut': { xTrack: 12, yTrack: 6, xSpan: 12, ySpan: 13 },
         'studio-audit-grid': { xTrack: 0, yTrack: 19, xSpan: 24, ySpan: 14 },
       },
     },
   ],
 };
+
+function classifyControlLayer(entry: AuditEntry): string {
+  const details = (entry.details || '').toUpperCase();
+  if (entry.status === 'PAYPAL_COMPLETED') {
+    return 'Liquidación PayPal Sandbox';
+  }
+  if (details.includes('BUDGET_EXCEEDED')) {
+    return 'Límite de Presupuesto CFO';
+  }
+  if (details.includes('GROUND_TRUTH_MISMATCH') || details.includes('HALLUCINATION_BLOCKED')) {
+    return 'Anti-Alucinación Channel3';
+  }
+  if (details.includes('ED25519') || details.includes('CRYPTO_ERROR')) {
+    return 'Firma Criptográfica Ed25519';
+  }
+  if (details.includes('AP2_HASH_MISMATCH')) {
+    return 'Integridad Hash AP2';
+  }
+  return 'Gobernanza CFO (Política)';
+}
+
+function classifyDecisionType(status: AuditEntry['status']): string {
+  if (status === 'PAYPAL_COMPLETED') return 'Pago Liquidado (PayPal)';
+  if (status === 'BLOCKED_BY_SHIELD') return 'Capital Protegido (Bloqueado)';
+  return 'Gobernanza / Firma de Política';
+}
 
 interface PolicyDashboardProps {
   policy: Policy | null;
@@ -184,15 +210,47 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({ policy, auditL
 
   const policyRows = useMemo(() => (policy ? [policy] : []), [policy]);
 
+  // Métricas financieras reales calculadas directamente sobre las transacciones de la sesión
+  const metrics = useMemo(() => {
+    const maxBudget = Number(policy?.max_budget_usd ?? 200);
+    const remaining = Number(policy?.remaining_usd ?? 200);
+    const usedPct = maxBudget > 0 ? Math.min(100, Math.max(0, ((maxBudget - remaining) / maxBudget) * 100)) : 0;
+
+    let settledUsd = 0;
+    let settledCount = 0;
+    let blockedUsd = 0;
+    let blockedCount = 0;
+
+    for (const entry of auditLog) {
+      const amt = Number(entry.amount ?? 0);
+      if (entry.status === 'PAYPAL_COMPLETED') {
+        settledUsd += amt;
+        settledCount += 1;
+      } else if (entry.status === 'BLOCKED_BY_SHIELD') {
+        blockedUsd += amt;
+        blockedCount += 1;
+      }
+    }
+
+    return {
+      maxBudget,
+      remaining,
+      usedPct,
+      settledUsd,
+      settledCount,
+      blockedUsd,
+      blockedCount,
+    };
+  }, [policy, auditLog]);
+
   const policyColumnDefs = useMemo<ColDef<Policy>[]>(() => {
     const cols: ColDef<Policy>[] = [
-      { field: 'agent_id', headerName: 'Agent ID', width: 150 },
-      { field: 'policy_id', headerName: 'Policy ID', width: 130 },
+      { field: 'agent_id', headerName: 'Agente IA', width: 145 },
       {
         field: 'max_budget_usd',
-        headerName: '✏️ Max Budget (USD)',
+        headerName: '✏️ Presupuesto Máx (USD)',
         editable: true,
-        width: 175,
+        width: 195,
         valueParser: (params) => Number(params.newValue),
         valueFormatter: (params) => `$${Number(params.value ?? 0).toFixed(2)}`,
         cellStyle: {
@@ -203,13 +261,14 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({ policy, auditL
       },
       {
         field: 'remaining_usd',
-        headerName: 'Remaining (USD)',
-        width: 160,
+        headerName: 'Saldo Disponible (USD)',
+        width: 175,
         valueFormatter: (params) => `$${Number(params.value ?? 0).toFixed(2)}`,
         cellStyle: { fontWeight: 'bold', color: '#34d399' },
       },
-      { field: 'cfo_signature', headerName: 'CFO Ed25519 Signature', flex: 1 },
-      { field: 'ap2_policy_hash', headerName: 'AP2 Policy Hash (SHA-256)', flex: 1 },
+      { field: 'allowed_category', headerName: 'Categoría Autorizada', width: 165 },
+      { field: 'cfo_signature', headerName: 'Firma Ed25519 del CFO', flex: 1 },
+      { field: 'ap2_policy_hash', headerName: 'Hash Mandato AP2 (SHA-256)', flex: 1 },
     ];
     return cols;
   }, []);
@@ -217,12 +276,12 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({ policy, auditL
   const auditColumnDefs = useMemo<ColDef<AuditEntry>[]>(
     () => [
       { field: 'timestamp', headerName: 'Hora', width: 95 },
-      { field: 'mandate_id', headerName: 'AP2 Mandate', width: 145 },
-      { field: 'item', headerName: 'Producto / Evento', width: 220 },
+      { field: 'mandate_id', headerName: 'Mandato AP2', width: 145 },
+      { field: 'item', headerName: 'Producto / Operación', width: 220 },
       {
         field: 'amount',
-        headerName: 'Monto',
-        width: 110,
+        headerName: 'Monto (USD)',
+        width: 120,
         valueFormatter: (p) => `$${Number(p.value ?? 0).toFixed(2)}`,
       },
       {
@@ -271,129 +330,51 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({ policy, auditL
     return '';
   }, []);
 
-  // Dataset enriquecido en tiempo real para AG Studio 3
+  // Dataset 100% real para AG Studio 3 (sin filas ficticias ni campos redundantes)
   const studioData = useMemo<AgDataSourcesDefinition>(() => {
-    const liveRows = auditLog.map((entry, idx) => {
+    const liveRows = auditLog.map((entry) => {
+      const amount = Number(entry.amount ?? 0);
+      const isSettled = entry.status === 'PAYPAL_COMPLETED';
       const isBlocked = entry.status === 'BLOCKED_BY_SHIELD';
-      const isApproved = entry.status === 'PAYPAL_COMPLETED';
-      const isPromptInjection =
-        entry.details.toLowerCase().includes('injection') ||
-        entry.details.toLowerCase().includes('riesgo') ||
-        Number(entry.amount) > (policy?.max_budget_usd ?? 200);
-
-      let category = 'Gob. Criptográfica AP2';
-      if (isApproved) category = 'Hardware & Periféricos (Autorizado)';
-      else if (isBlocked && isPromptInjection) category = 'Ataque Prompt Injection / Exceso';
-      else if (isBlocked) category = 'Violación de Presupuesto CFO';
-
-      const riskScore = isBlocked ? (isPromptInjection ? 96 : 82) : isApproved ? 12 : 5;
 
       return {
-        row_id: `LIVE-${idx + 1}`,
         timestamp: entry.timestamp,
         mandate_id: entry.mandate_id,
         item: entry.item,
-        amount_usd: Number(entry.amount ?? 0),
-        status: entry.status,
-        category,
-        risk_score: riskScore,
-        agent_id: policy?.agent_id ?? 'agent-buyer-01',
-        max_budget_usd: Number(policy?.max_budget_usd ?? 200),
-        remaining_usd: Number(policy?.remaining_usd ?? 200),
+        decision_type: classifyDecisionType(entry.status),
+        control_layer: classifyControlLayer(entry),
+        tx_amount_usd: isSettled || isBlocked ? amount : 0,
+        settled_usd: isSettled ? amount : 0,
+        blocked_usd: isBlocked ? amount : 0,
         details: entry.details,
       };
     });
 
-    // Si solo existe el evento de arranque, agregamos telemetría semilla de referencia para que los gráficos de AG Studio luzcan completos desde el primer segundo
-    const referenceRows =
-      liveRows.length <= 1
-        ? [
-            {
-              row_id: 'SEED-1',
-              timestamp: '09:14:22',
-              mandate_id: 'AP2-8F91A02C',
-              item: 'Keychron K2 Mechanical Keyboard',
-              amount_usd: 89.99,
-              status: 'PAYPAL_COMPLETED',
-              category: 'Hardware & Periféricos (Autorizado)',
-              risk_score: 11,
-              agent_id: 'agent-buyer-01',
-              max_budget_usd: Number(policy?.max_budget_usd ?? 200),
-              remaining_usd: Number(policy?.remaining_usd ?? 200),
-              details: 'PayPal Order COMPLETED | Ed25519 Verified',
-            },
-            {
-              row_id: 'SEED-2',
-              timestamp: '09:16:05',
-              mandate_id: 'AP2-3C77D19E',
-              item: 'Logitech MX Master 3S Mouse',
-              amount_usd: 99.0,
-              status: 'PAYPAL_COMPLETED',
-              category: 'Hardware & Periféricos (Autorizado)',
-              risk_score: 14,
-              agent_id: 'agent-buyer-01',
-              max_budget_usd: Number(policy?.max_budget_usd ?? 200),
-              remaining_usd: Number(policy?.remaining_usd ?? 200),
-              details: 'PayPal Order COMPLETED | Ed25519 Verified',
-            },
-            {
-              row_id: 'SEED-3',
-              timestamp: '09:18:40',
-              mandate_id: 'AP2-9A04F61B',
-              item: 'NVIDIA RTX 4090 GPU (Rogue Prompt)',
-              amount_usd: 450.0,
-              status: 'BLOCKED_BY_SHIELD',
-              category: 'Ataque Prompt Injection / Exceso',
-              risk_score: 98,
-              agent_id: 'agent-buyer-01',
-              max_budget_usd: Number(policy?.max_budget_usd ?? 200),
-              remaining_usd: Number(policy?.remaining_usd ?? 200),
-              details: 'Blocked by AP2 Firewall: Exceeds CFO Max Budget & Prompt Injection',
-            },
-            {
-              row_id: 'SEED-4',
-              timestamp: '09:21:10',
-              mandate_id: 'AP2-5D12E88A',
-              item: 'Apple MacBook Pro M3 Max (Unauthorized)',
-              amount_usd: 2500.0,
-              status: 'BLOCKED_BY_SHIELD',
-              category: 'Violación de Presupuesto CFO',
-              risk_score: 94,
-              agent_id: 'agent-buyer-01',
-              max_budget_usd: Number(policy?.max_budget_usd ?? 200),
-              remaining_usd: Number(policy?.remaining_usd ?? 200),
-              details: 'Blocked by AP2 Firewall: Zero PayPal API Calls Executed',
-            },
-          ]
-        : [];
-
     return {
       description:
-        'Telemetría en tiempo real del Firewall Criptográfico AP2 (Ed25519), políticas del CFO y órdenes liquidadas en PayPal Sandbox.',
+        'Auditoría financiera y criptográfica en tiempo real de mandatos AP2, bloqueos del firewall y pagos liquidados en PayPal Sandbox.',
       sources: [
         {
           id: 'ap2_shield_telemetry',
           name: 'Auditoría AP2 & PayPal Sandbox',
           description:
-            'Eventos de compra de agentes IA, veredictos del firewall AP2, montos en USD y puntajes de riesgo.',
-          data: [...liveRows, ...referenceRows],
+            'Transacciones reales evaluadas por el Firewall Criptográfico AP2 y liquidadas en PayPal Sandbox.',
+          data: liveRows,
           fields: [
             { id: 'timestamp', name: 'Hora', format: 'textFormat' },
             { id: 'mandate_id', name: 'Mandato AP2', format: 'textFormat' },
-            { id: 'item', name: 'Producto / Evento', format: 'textFormat' },
-            { id: 'category', name: 'Categoría / Vector', format: 'textFormat' },
-            { id: 'status', name: 'Veredicto Shield', format: 'textFormat' },
-            { id: 'agent_id', name: 'Agent ID', format: 'textFormat' },
-            { id: 'amount_usd', name: 'Monto (USD)', format: 'currencyFormat' },
-            { id: 'risk_score', name: 'Score de Riesgo', format: 'integerFormat' },
-            { id: 'max_budget_usd', name: 'Presupuesto CFO (USD)', format: 'currencyFormat' },
-            { id: 'remaining_usd', name: 'Saldo Disponible (USD)', format: 'currencyFormat' },
+            { id: 'item', name: 'Producto / Operación', format: 'textFormat' },
+            { id: 'decision_type', name: 'Decisión Financiera', format: 'textFormat' },
+            { id: 'control_layer', name: 'Capa de Seguridad AP2', format: 'textFormat' },
+            { id: 'tx_amount_usd', name: 'Monto Evaluado (USD)', format: 'currencyFormat' },
+            { id: 'settled_usd', name: 'Pagado en PayPal (USD)', format: 'currencyFormat' },
+            { id: 'blocked_usd', name: 'Capital Protegido (USD)', format: 'currencyFormat' },
             { id: 'details', name: 'Evidencia Criptográfica', format: 'textFormat' },
           ],
         },
       ],
     };
-  }, [auditLog, policy]);
+  }, [auditLog]);
 
   return (
     <div className="dashboard-panel">
@@ -401,30 +382,40 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({ policy, auditL
         <div className="kpi-card">
           <div className="kpi-label">Presupuesto Autorizado (CFO)</div>
           <div className="kpi-value" id="kpi-max">
-            ${policy ? Number(policy.max_budget_usd).toFixed(2) : '200.00'}
+            ${metrics.maxBudget.toFixed(2)}
+          </div>
+          <div className="kpi-sub">
+            Política activa: {policy?.policy_id ?? 'pol_default'}
           </div>
         </div>
+
         <div className="kpi-card">
           <div className="kpi-label">Saldo Disponible (AG Grid)</div>
           <div className="kpi-value" id="kpi-remaining" style={{ color: '#34d399' }}>
-            ${policy ? Number(policy.remaining_usd).toFixed(2) : '200.00'}
+            ${metrics.remaining.toFixed(2)}
+          </div>
+          <div className="kpi-sub">
+            {metrics.usedPct.toFixed(1)}% del presupuesto utilizado
           </div>
         </div>
+
         <div className="kpi-card">
-          <div className="kpi-label">Identidades Ed25519 &amp; Hash AP2</div>
-          <div
-            className="kpi-value"
-            id="kpi-hash"
-            style={{
-              fontSize: '12px',
-              fontFamily: 'monospace',
-              color: '#cbd5e1',
-              marginTop: '8px',
-            }}
-          >
-            {policy
-              ? `CFO PubKey: ${policy.cfo_pubkey}... | AP2: ${policy.ap2_policy_hash.slice(0, 18)}...`
-              : '—'}
+          <div className="kpi-label">Liquidado en PayPal Sandbox</div>
+          <div className="kpi-value" style={{ color: '#38bdf8' }}>
+            ${metrics.settledUsd.toFixed(2)}
+          </div>
+          <div className="kpi-sub">
+            {metrics.settledCount} {metrics.settledCount === 1 ? 'orden completada' : 'órdenes completadas'}
+          </div>
+        </div>
+
+        <div className="kpi-card">
+          <div className="kpi-label">Capital Protegido (Bloqueado)</div>
+          <div className="kpi-value" style={{ color: '#f87171' }}>
+            ${metrics.blockedUsd.toFixed(2)}
+          </div>
+          <div className="kpi-sub">
+            {metrics.blockedCount} {metrics.blockedCount === 1 ? 'intento detenido' : 'intentos detenidos'} por Shield
           </div>
         </div>
       </div>
@@ -455,7 +446,7 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({ policy, auditL
             <input
               type="text"
               className="audit-search-input"
-              placeholder="🔍 Filtrar mandato, item, estado..."
+              placeholder="🔍 Filtrar mandato, producto, estado..."
               value={quickFilter}
               onChange={(e) => setQuickFilter(e.target.value)}
             />
@@ -470,7 +461,7 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({ policy, auditL
           </div>
         ) : (
           <div className="audit-toolbar">
-            <span style={{ fontSize: '11.5px', color: '#94a3b8' }}>
+            <span style={{ fontSize: '11.5px', color: '#cbd5e1' }}>
               Modo de AG Studio 3:
             </span>
             <button
@@ -499,8 +490,8 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({ policy, auditL
             <div className="section-header">
               <span>1. Políticas Presupuestarias del CFO (AG Grid Editable)</span>
               <span className="hint">
-                💡 Haz doble clic en &quot;✏️ Max Budget&quot; y presiona Enter para firmar un nuevo
-                Mandato AP2
+                💡 Haz doble clic en &quot;✏️ Presupuesto Máx (USD)&quot; y presiona Enter para
+                firmar un nuevo Mandato AP2
               </span>
             </div>
             <div
@@ -560,10 +551,10 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({ policy, auditL
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <div className="section-header">
             <span>
-              📊 AG Studio 3 — Centro de Inteligencia Financiera &amp; Riesgo Criptográfico AP2
+              📊 AG Studio 3 — Auditoría Financiera de Pagos PayPal vs. Capital Protegido por AP2
             </span>
             <span className="hint">
-              ✨ Arrastra campos, crea Pivot Grids, gráficos de barras/dona y cruza filtros en vivo
+              ✨ Datos 100% en tiempo real desde la sesión activa (sin filas ficticias)
             </span>
           </div>
           <div className="studio-container-wrapper" data-ag-theme-mode="dark">
