@@ -470,8 +470,11 @@ async def process_ap2_checkout(req: CheckoutRequest):
 
 
 @app.post("/api/chat")
-async def chat_endpoint(req: ChatRequest):
+async def chat_endpoint(req: ChatRequest, request: Request):
     """Ejecuta el agente de Google ADK y devuelve los trazos de herramientas + respuesta."""
+    if request.url.port:
+        os.environ["SHIELD_RUNTIME_PORT"] = str(request.url.port)
+
     if not (_has_valid_key("GOOGLE_API_KEY") or _has_valid_key("GEMINI_API_KEY")):
         return {
             "reply": (
