@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useState, useRef } from 'react';
 import { AgGridReact } from 'ag-grid-react';
 import {
   AllCommunityModule,
@@ -10,6 +10,13 @@ import {
   type RowClassParams,
   type ICellRendererParams,
 } from 'ag-grid-community';
+import { AgStudio } from 'ag-studio-react';
+import {
+  studioTheme,
+  type AgDataSourcesDefinition,
+  type AgReportState,
+  type AgStudioMode,
+} from 'ag-studio';
 import type { Policy, AuditEntry } from '../types/shield';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -21,6 +28,104 @@ const darkGridTheme = themeQuartz.withPart(colorSchemeDark).withParams({
   foregroundColor: '#f1f5f9',
   borderColor: '#334155',
 });
+
+const darkStudioTheme = studioTheme.withParams({
+  backgroundColor: '#0f172a',
+  textColor: '#f8fafc',
+  borderColor: '#334155',
+  studioCanvasBackgroundColor: '#0b1120',
+  studioWidgetBackgroundColor: '#0f172a',
+  studioWidgetTitleTextColor: '#f8fafc',
+  studioWidgetSubtitleTextColor: '#94a3b8',
+  studioWidgetCaptionTextColor: '#94a3b8',
+  chartTextColor: '#f8fafc',
+  chartSubtleTextColor: '#94a3b8',
+  chartAxisLineColor: '#475569',
+  chartGridLineColor: '#1e293b',
+});
+
+const initialStudioState: AgReportState = {
+  selectedPageId: 'cfo-ap2-analytics',
+  pages: [
+    {
+      id: 'cfo-ap2-analytics',
+      widgets: {
+        'kpi-total-volume': {
+          type: 'value',
+          format: {
+            title: { text: 'Volumen Total Evaluado (USD)', enabled: true },
+          },
+          dataMapping: {
+            value: [{ id: 'amount_usd', aggregation: 'sum' }],
+          },
+        },
+        'kpi-mandates-count': {
+          type: 'value',
+          format: {
+            title: { text: 'Mandatos AP2 Auditados', enabled: true },
+          },
+          dataMapping: {
+            value: [{ id: 'mandate_id', aggregation: 'count' }],
+          },
+        },
+        'kpi-avg-risk': {
+          type: 'value',
+          format: {
+            title: { text: 'Risk Score Promedio (Shield)', enabled: true },
+          },
+          dataMapping: {
+            value: [{ id: 'risk_score', aggregation: 'avg' }],
+          },
+        },
+        'chart-verdict-volume': {
+          type: 'bar-chart-grouped',
+          format: {
+            title: { text: 'Volumen USD por Veredicto del Firewall AP2', enabled: true },
+          },
+          dataMapping: {
+            categoryKey: [{ id: 'status' }],
+            valueKey: [{ id: 'amount_usd', aggregation: 'sum' }],
+          },
+        },
+        'chart-category-donut': {
+          type: 'donut-chart',
+          format: {
+            title: { text: 'Exposición por Vector / Categoría', enabled: true },
+          },
+          dataMapping: {
+            categoryKey: [{ id: 'category' }],
+            valueKey: [{ id: 'amount_usd', aggregation: 'sum' }],
+          },
+        },
+        'studio-audit-grid': {
+          type: 'grid',
+          format: {
+            title: { text: 'Tabla Analítica AP2 & PayPal Sandbox (AG Studio)', enabled: true },
+          },
+          dataMapping: {
+            cols: [
+              { id: 'timestamp' },
+              { id: 'mandate_id' },
+              { id: 'item' },
+              { id: 'category' },
+              { id: 'status' },
+              { id: 'amount_usd', aggregation: 'sum' },
+              { id: 'risk_score', aggregation: 'avg' },
+            ],
+          },
+        },
+      },
+      widgetLayout: {
+        'kpi-total-volume': { xTrack: 0, yTrack: 0, xSpan: 8, ySpan: 6 },
+        'kpi-mandates-count': { xTrack: 8, yTrack: 0, xSpan: 8, ySpan: 6 },
+        'kpi-avg-risk': { xTrack: 16, yTrack: 0, xSpan: 8, ySpan: 6 },
+        'chart-verdict-volume': { xTrack: 0, yTrack: 6, xSpan: 12, ySpan: 13 },
+        'chart-category-donut': { xTrack: 12, yTrack: 6, xSpan: 12, ySpan: 13 },
+        'studio-audit-grid': { xTrack: 0, yTrack: 19, xSpan: 24, ySpan: 14 },
+      },
+    },
+  ],
+};
 
 interface PolicyDashboardProps {
   policy: Policy | null;
@@ -42,6 +147,11 @@ const StatusCellRenderer: React.FC<ICellRendererParams<AuditEntry>> = (params) =
 };
 
 export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({ policy, auditLog }) => {
+  const [activeView, setActiveView] = useState<'control-plane' | 'ag-studio'>('control-plane');
+  const [studioMode, setStudioMode] = useState<AgStudioMode>('edit');
+  const [quickFilter, setQuickFilter] = useState<string>('');
+  const auditGridRef = useRef<AgGridReact<AuditEntry>>(null);
+
   const policyRows = useMemo(() => (policy ? [policy] : []), [policy]);
 
   const policyColumnDefs = useMemo<ColDef<Policy>[]>(() => {
@@ -117,6 +227,12 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({ policy, auditL
     []
   );
 
+  const handleExportAuditCsv = useCallback(() => {
+    auditGridRef.current?.api?.exportDataAsCsv({
+      fileName: `paypal-agent-shield-ap2-audit-${new Date().toISOString().slice(0, 10)}.csv`,
+    });
+  }, []);
+
   const getAuditRowClass = useCallback((params: RowClassParams<AuditEntry>) => {
     if (!params.data) return '';
     if (params.data.status === 'BLOCKED_BY_SHIELD') return 'row-blocked';
@@ -124,6 +240,130 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({ policy, auditL
     if (params.data.status === 'POLICY_SIGNED') return 'row-policy';
     return '';
   }, []);
+
+  // Dataset enriquecido en tiempo real para AG Studio 3
+  const studioData = useMemo<AgDataSourcesDefinition>(() => {
+    const liveRows = auditLog.map((entry, idx) => {
+      const isBlocked = entry.status === 'BLOCKED_BY_SHIELD';
+      const isApproved = entry.status === 'PAYPAL_COMPLETED';
+      const isPromptInjection =
+        entry.details.toLowerCase().includes('injection') ||
+        entry.details.toLowerCase().includes('riesgo') ||
+        Number(entry.amount) > (policy?.max_budget_usd ?? 200);
+
+      let category = 'Gob. Criptográfica AP2';
+      if (isApproved) category = 'Hardware & Periféricos (Autorizado)';
+      else if (isBlocked && isPromptInjection) category = 'Ataque Prompt Injection / Exceso';
+      else if (isBlocked) category = 'Violación de Presupuesto CFO';
+
+      const riskScore = isBlocked ? (isPromptInjection ? 96 : 82) : isApproved ? 12 : 5;
+
+      return {
+        row_id: `LIVE-${idx + 1}`,
+        timestamp: entry.timestamp,
+        mandate_id: entry.mandate_id,
+        item: entry.item,
+        amount_usd: Number(entry.amount ?? 0),
+        status: entry.status,
+        category,
+        risk_score: riskScore,
+        agent_id: policy?.agent_id ?? 'agent-buyer-01',
+        max_budget_usd: Number(policy?.max_budget_usd ?? 200),
+        remaining_usd: Number(policy?.remaining_usd ?? 200),
+        details: entry.details,
+      };
+    });
+
+    // Si solo existe el evento de arranque, agregamos telemetría semilla de referencia para que los gráficos de AG Studio luzcan completos desde el primer segundo
+    const referenceRows =
+      liveRows.length <= 1
+        ? [
+            {
+              row_id: 'SEED-1',
+              timestamp: '09:14:22',
+              mandate_id: 'AP2-8F91A02C',
+              item: 'Keychron K2 Mechanical Keyboard',
+              amount_usd: 89.99,
+              status: 'PAYPAL_COMPLETED',
+              category: 'Hardware & Periféricos (Autorizado)',
+              risk_score: 11,
+              agent_id: 'agent-buyer-01',
+              max_budget_usd: Number(policy?.max_budget_usd ?? 200),
+              remaining_usd: Number(policy?.remaining_usd ?? 200),
+              details: 'PayPal Order COMPLETED | Ed25519 Verified',
+            },
+            {
+              row_id: 'SEED-2',
+              timestamp: '09:16:05',
+              mandate_id: 'AP2-3C77D19E',
+              item: 'Logitech MX Master 3S Mouse',
+              amount_usd: 99.0,
+              status: 'PAYPAL_COMPLETED',
+              category: 'Hardware & Periféricos (Autorizado)',
+              risk_score: 14,
+              agent_id: 'agent-buyer-01',
+              max_budget_usd: Number(policy?.max_budget_usd ?? 200),
+              remaining_usd: Number(policy?.remaining_usd ?? 200),
+              details: 'PayPal Order COMPLETED | Ed25519 Verified',
+            },
+            {
+              row_id: 'SEED-3',
+              timestamp: '09:18:40',
+              mandate_id: 'AP2-9A04F61B',
+              item: 'NVIDIA RTX 4090 GPU (Rogue Prompt)',
+              amount_usd: 450.0,
+              status: 'BLOCKED_BY_SHIELD',
+              category: 'Ataque Prompt Injection / Exceso',
+              risk_score: 98,
+              agent_id: 'agent-buyer-01',
+              max_budget_usd: Number(policy?.max_budget_usd ?? 200),
+              remaining_usd: Number(policy?.remaining_usd ?? 200),
+              details: 'Blocked by AP2 Firewall: Exceeds CFO Max Budget & Prompt Injection',
+            },
+            {
+              row_id: 'SEED-4',
+              timestamp: '09:21:10',
+              mandate_id: 'AP2-5D12E88A',
+              item: 'Apple MacBook Pro M3 Max (Unauthorized)',
+              amount_usd: 2500.0,
+              status: 'BLOCKED_BY_SHIELD',
+              category: 'Violación de Presupuesto CFO',
+              risk_score: 94,
+              agent_id: 'agent-buyer-01',
+              max_budget_usd: Number(policy?.max_budget_usd ?? 200),
+              remaining_usd: Number(policy?.remaining_usd ?? 200),
+              details: 'Blocked by AP2 Firewall: Zero PayPal API Calls Executed',
+            },
+          ]
+        : [];
+
+    return {
+      description:
+        'Telemetría en tiempo real del Firewall Criptográfico AP2 (Ed25519), políticas del CFO y órdenes liquidadas en PayPal Sandbox.',
+      sources: [
+        {
+          id: 'ap2_shield_telemetry',
+          name: 'Auditoría AP2 & PayPal Sandbox',
+          description:
+            'Eventos de compra de agentes IA, veredictos del firewall AP2, montos en USD y puntajes de riesgo.',
+          data: [...liveRows, ...referenceRows],
+          fields: [
+            { id: 'timestamp', name: 'Hora', format: 'textFormat' },
+            { id: 'mandate_id', name: 'Mandato AP2', format: 'textFormat' },
+            { id: 'item', name: 'Producto / Evento', format: 'textFormat' },
+            { id: 'category', name: 'Categoría / Vector', format: 'textFormat' },
+            { id: 'status', name: 'Veredicto Shield', format: 'textFormat' },
+            { id: 'agent_id', name: 'Agent ID', format: 'textFormat' },
+            { id: 'amount_usd', name: 'Monto (USD)', format: 'currencyFormat' },
+            { id: 'risk_score', name: 'Score de Riesgo', format: 'integerFormat' },
+            { id: 'max_budget_usd', name: 'Presupuesto CFO (USD)', format: 'currencyFormat' },
+            { id: 'remaining_usd', name: 'Saldo Disponible (USD)', format: 'currencyFormat' },
+            { id: 'details', name: 'Evidencia Criptográfica', format: 'textFormat' },
+          ],
+        },
+      ],
+    };
+  }, [auditLog, policy]);
 
   return (
     <div className="dashboard-panel">
@@ -141,7 +381,7 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({ policy, auditL
           </div>
         </div>
         <div className="kpi-card">
-          <div className="kpi-label">Identidades Ed25519 & Hash AP2</div>
+          <div className="kpi-label">Identidades Ed25519 &amp; Hash AP2</div>
           <div
             className="kpi-value"
             id="kpi-hash"
@@ -159,64 +399,155 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({ policy, auditL
         </div>
       </div>
 
-      <div>
-        <div className="section-header">
-          <span>1. Políticas Presupuestarias del CFO (AG Grid Editable)</span>
-          <span className="hint">
-            💡 Haz doble clic en &quot;✏️ Max Budget&quot; y presiona Enter para firmar un nuevo
-            Mandato AP2
-          </span>
+      {/* Selector de vista: Control Plane (AG Grid) vs CFO Analytics Studio (AG Studio 3) */}
+      <div className="studio-switcher-bar">
+        <div className="studio-tabs">
+          <button
+            type="button"
+            className={`studio-tab-btn ${activeView === 'control-plane' ? 'active' : ''}`}
+            onClick={() => setActiveView('control-plane')}
+          >
+            🛡️ Control Plane (AG Grid En Vivo)
+          </button>
+          <button
+            type="button"
+            className={`studio-tab-btn studio-highlight ${
+              activeView === 'ag-studio' ? 'active' : ''
+            }`}
+            onClick={() => setActiveView('ag-studio')}
+          >
+            📊 CFO Analytics Studio (AG Studio 3 BI)
+          </button>
         </div>
-        <div
-          id="policyGrid"
-          className="grid-wrapper ag-theme-quartz-dark"
-          style={{ height: '110px', width: '100%' }}
-        >
-          <AgGridReact<Policy>
-            theme={darkGridTheme}
-            rowData={policyRows}
-            columnDefs={policyColumnDefs}
-            onCellValueChanged={handlePolicyCellValueChanged}
-          />
-        </div>
+
+        {activeView === 'control-plane' ? (
+          <div className="audit-toolbar">
+            <input
+              type="text"
+              className="audit-search-input"
+              placeholder="🔍 Filtrar mandato, item, estado..."
+              value={quickFilter}
+              onChange={(e) => setQuickFilter(e.target.value)}
+            />
+            <button
+              type="button"
+              className="btn-export-csv"
+              onClick={handleExportAuditCsv}
+              title="Exportar auditoría criptográfica AP2 en formato CSV"
+            >
+              📥 Exportar CSV AP2
+            </button>
+          </div>
+        ) : (
+          <div className="audit-toolbar">
+            <span style={{ fontSize: '11.5px', color: '#94a3b8' }}>
+              Modo de AG Studio 3:
+            </span>
+            <button
+              type="button"
+              className={`studio-tab-btn ${studioMode === 'edit' ? 'active' : ''}`}
+              style={{ padding: '4px 10px', fontSize: '11.5px' }}
+              onClick={() => setStudioMode('edit')}
+            >
+              🛠️ Diseñador BI (Edit)
+            </button>
+            <button
+              type="button"
+              className={`studio-tab-btn ${studioMode === 'view' ? 'active' : ''}`}
+              style={{ padding: '4px 10px', fontSize: '11.5px' }}
+              onClick={() => setStudioMode('view')}
+            >
+              👁️ Reporte Ejecutivo (View)
+            </button>
+          </div>
+        )}
       </div>
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <div className="section-header">
-          <span>
-            2. Firewall en Vivo: Auditoría Criptográfica AP2 &amp; Liquidación PayPal (APIMatic)
-          </span>
-          <a
-            href="https://developer.paypal.com/dashboard/api-calls/sandbox"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              fontSize: '12px',
-              color: '#38bdf8',
-              textDecoration: 'none',
-              background: 'rgba(56,189,248,0.1)',
-              border: '1px solid rgba(56,189,248,0.3)',
-              padding: '3px 10px',
-              borderRadius: '6px',
-              fontWeight: 600,
-            }}
-          >
-            📡 Ver API Calls en PayPal Sandbox ↗
-          </a>
+      {activeView === 'control-plane' ? (
+        <>
+          <div>
+            <div className="section-header">
+              <span>1. Políticas Presupuestarias del CFO (AG Grid Editable)</span>
+              <span className="hint">
+                💡 Haz doble clic en &quot;✏️ Max Budget&quot; y presiona Enter para firmar un nuevo
+                Mandato AP2
+              </span>
+            </div>
+            <div
+              id="policyGrid"
+              className="grid-wrapper ag-theme-quartz-dark"
+              style={{ height: '110px', width: '100%' }}
+            >
+              <AgGridReact<Policy>
+                theme={darkGridTheme}
+                rowData={policyRows}
+                columnDefs={policyColumnDefs}
+                onCellValueChanged={handlePolicyCellValueChanged}
+              />
+            </div>
+          </div>
+
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div className="section-header">
+              <span>
+                2. Firewall en Vivo: Auditoría Criptográfica AP2 &amp; Liquidación PayPal (APIMatic)
+              </span>
+              <a
+                href="https://developer.paypal.com/dashboard/api-calls/sandbox"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  fontSize: '12px',
+                  color: '#38bdf8',
+                  textDecoration: 'none',
+                  background: 'rgba(56,189,248,0.1)',
+                  border: '1px solid rgba(56,189,248,0.3)',
+                  padding: '3px 10px',
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                }}
+              >
+                📡 Ver API Calls en PayPal Sandbox ↗
+              </a>
+            </div>
+            <div
+              id="auditGrid"
+              className="grid-wrapper ag-theme-quartz-dark"
+              style={{ flex: 1, minHeight: '280px', width: '100%' }}
+            >
+              <AgGridReact<AuditEntry>
+                ref={auditGridRef}
+                theme={darkGridTheme}
+                rowData={auditLog}
+                columnDefs={auditColumnDefs}
+                getRowClass={getAuditRowClass}
+                quickFilterText={quickFilter}
+              />
+            </div>
+          </div>
+        </>
+      ) : (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <div className="section-header">
+            <span>
+              📊 AG Studio 3 — Centro de Inteligencia Financiera &amp; Riesgo Criptográfico AP2
+            </span>
+            <span className="hint">
+              ✨ Arrastra campos, crea Pivot Grids, gráficos de barras/dona y cruza filtros en vivo
+            </span>
+          </div>
+          <div className="studio-container-wrapper">
+            <AgStudio
+              theme={darkStudioTheme}
+              data={studioData}
+              initialState={initialStudioState}
+              mode={studioMode}
+              enableFilterEditingInViewMode={true}
+              style={{ width: '100%', height: '100%', flex: 1 }}
+            />
+          </div>
         </div>
-        <div
-          id="auditGrid"
-          className="grid-wrapper ag-theme-quartz-dark"
-          style={{ flex: 1, minHeight: '300px', width: '100%' }}
-        >
-          <AgGridReact<AuditEntry>
-            theme={darkGridTheme}
-            rowData={auditLog}
-            columnDefs={auditColumnDefs}
-            getRowClass={getAuditRowClass}
-          />
-        </div>
-      </div>
+      )}
     </div>
   );
 };

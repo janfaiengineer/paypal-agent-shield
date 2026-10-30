@@ -11,10 +11,13 @@
   "dependencies": {
     "ag-grid-community": "^33.2.1",
     "ag-grid-react": "^33.2.1",
+    "ag-studio": "^3.0.0",
+    "ag-studio-react": "^3.0.0",
     "dompurify": "^3.2.4",
     "marked": "^15.0.7",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "tslib": "^2.8.1"
   },
   "devDependencies": {
     "@types/dompurify": "^3.0.5",

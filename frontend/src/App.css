@@ -364,3 +364,92 @@ body,
   color: #7dd3fc;
   border: 1px solid #38bdf8;
 }
+
+/* Barra de conmutación AG Grid Control Plane vs AG Studio 3 */
+.studio-switcher-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #090d16;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  gap: 12px;
+}
+.studio-tabs {
+  display: flex;
+  gap: 8px;
+}
+.studio-tab-btn {
+  background: #1e293b;
+  color: #cbd5e1;
+  border: 1px solid #334155;
+  padding: 7px 14px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+.studio-tab-btn:hover {
+  border-color: var(--accent);
+  color: #f8fafc;
+}
+.studio-tab-btn.active {
+  background: rgba(56, 189, 248, 0.18);
+  color: #38bdf8;
+  border-color: #38bdf8;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+}
+.studio-tab-btn.studio-highlight.active {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border-color: #f59e0b;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.25);
+}
+.audit-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.audit-search-input {
+  background: #090d16;
+  border: 1px solid var(--border);
+  color: #f8fafc;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  width: 210px;
+  outline: none;
+}
+.audit-search-input:focus {
+  border-color: var(--accent);
+}
+.btn-export-csv {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-export-csv:hover {
+  background: rgba(16, 185, 129, 0.28);
+  border-color: #10b981;
+}
+.studio-container-wrapper {
+  flex: 1;
+  min-height: 520px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: #0b1120;
+}

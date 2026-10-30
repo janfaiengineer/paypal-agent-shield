@@ -15,7 +15,10 @@ services:
       - key: GEMINI_MODEL
         value: gemini-3.8-flash
       - key: RENDER_WORKFLOW_SLUG
-        value: paypal-shield-workflow
+        fromService:
+          type: workflow
+          name: paypal-shield-workflow
+          property: slug
       - key: GOOGLE_API_KEY
         sync: false
       - key: PAYPAL_CLIENT_ID
@@ -30,7 +33,6 @@ services:
   # 2. Motor Distribuido Render Workflows (Requisito oficial del Hackatón)
   - type: workflow
     name: paypal-shield-workflow
-    slug: paypal-shield-workflow
     runtime: python
     region: oregon
     repo: https://github.com/janfaiengineer/paypal-agent-shield

@@ -17,10 +17,11 @@ export default defineConfig({
       output: {
         manualChunks: {
           'ag-grid': ['ag-grid-community', 'ag-grid-react'],
+          'ag-studio': ['ag-studio', 'ag-studio-react'],
           vendor: ['react', 'react-dom', 'marked', 'dompurify'],
         },
       },
     },
-    chunkSizeWarningLimit: 1200,
+    chunkSizeWarningLimit: 7000,
   },
 });

@@ -28,7 +28,16 @@ export const Topbar: React.FC<TopbarProps> = ({ credsStatus, onOpenConfig }) => 
         <span className="tag">AP2 Ed25519</span>
         <span className="tag">PayPal APIMatic SDK</span>
         <span className="tag">Render Workflows</span>
-        <span className="tag">AG Grid</span>
+        <span
+          className="tag"
+          style={{
+            background: 'rgba(245, 158, 11, 0.16)',
+            color: '#fbbf24',
+            borderColor: 'rgba(245, 158, 11, 0.45)',
+          }}
+        >
+          AG Studio 3 + AG Grid
+        </span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         <span
