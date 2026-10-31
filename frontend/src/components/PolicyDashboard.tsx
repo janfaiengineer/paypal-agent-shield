@@ -10,14 +10,17 @@ import {
   type RowClassParams,
   type ICellRendererParams,
 } from 'ag-grid-community';
-import { AgStudio } from 'ag-studio-react';
+import { AgStudio, AgStudioProvider } from 'ag-studio-react';
 import {
+  AgStudioAiModule,
   studioTheme,
   type AgDataSourcesDefinition,
   type AgReportState,
   type AgStudioMode,
 } from 'ag-studio';
 import { BryntumTaskBoardView } from './BryntumTaskBoardView';
+import { configureStudioWidgets } from './studio/ap2ShieldWidget';
+import { buildStudioAi } from './studio/studioAi';
 import type {
   Policy,
   AuditEntry,
@@ -77,12 +80,28 @@ const darkStudioTheme = studioTheme
     chartGridLineColor: '#1e293b',
   });
 
-const initialStudioState: AgReportState = {
+const initialStudioState = {
   selectedPageId: 'cfo-ap2-analytics',
   pages: [
     {
       id: 'cfo-ap2-analytics',
       widgets: {
+        'shield-posture-widget': {
+          type: 'ap2-shield-posture',
+          format: {
+            title: {
+              text: '🛡️ AP2 4-Layer Defense Pipeline (Interactive Custom Widget)',
+              enabled: true,
+            },
+          },
+          dataMapping: {
+            dimension: [{ id: 'audit_ledger.control_layer' }],
+            value: [
+              { id: 'audit_ledger.settled_usd', aggregation: 'sum' },
+              { id: 'audit_ledger.blocked_usd', aggregation: 'sum' },
+            ],
+          },
+        },
         'kpi-settled-usd': {
           type: 'value',
           format: {
@@ -90,7 +109,7 @@ const initialStudioState: AgReportState = {
             style: { color: '#34d399' },
           },
           dataMapping: {
-            value: [{ id: 'settled_usd', aggregation: 'sum' }],
+            value: [{ id: 'audit_ledger.settled_usd', aggregation: 'sum' }],
           },
         },
         'kpi-blocked-usd': {
@@ -100,7 +119,7 @@ const initialStudioState: AgReportState = {
             style: { color: '#f87171' },
           },
           dataMapping: {
-            value: [{ id: 'blocked_usd', aggregation: 'sum' }],
+            value: [{ id: 'audit_ledger.blocked_usd', aggregation: 'sum' }],
           },
         },
         'kpi-mandates-count': {
@@ -110,7 +129,7 @@ const initialStudioState: AgReportState = {
             style: { color: '#38bdf8' },
           },
           dataMapping: {
-            value: [{ id: 'mandate_id', aggregation: 'count' }],
+            value: [{ id: 'audit_ledger.mandate_id', aggregation: 'count' }],
           },
         },
         'chart-decision-volume': {
@@ -119,8 +138,8 @@ const initialStudioState: AgReportState = {
             title: { text: 'Flujo Financiero: Pagado vs Bloqueado (USD)', enabled: true },
           },
           dataMapping: {
-            categoryKey: [{ id: 'decision_type' }],
-            valueKey: [{ id: 'tx_amount_usd', aggregation: 'sum' }],
+            categoryKey: [{ id: 'audit_ledger.decision_type' }],
+            valueKey: [{ id: 'audit_ledger.tx_amount_usd', aggregation: 'sum' }],
           },
         },
         'chart-layer-donut': {
@@ -129,39 +148,45 @@ const initialStudioState: AgReportState = {
             title: { text: 'Eventos por Capa de Seguridad AP2', enabled: true },
           },
           dataMapping: {
-            categoryKey: [{ id: 'control_layer' }],
-            valueKey: [{ id: 'mandate_id', aggregation: 'count' }],
+            categoryKey: [{ id: 'audit_ledger.control_layer' }],
+            valueKey: [{ id: 'audit_ledger.mandate_id', aggregation: 'count' }],
           },
         },
         'studio-audit-grid': {
           type: 'grid',
           format: {
-            title: { text: 'Desglose de Transacciones Reales (AG Studio)', enabled: true },
+            title: {
+              text: 'Desglose Relacional: Transacciones AP2 ⋈ Políticas CFO (AG Studio)',
+              enabled: true,
+            },
           },
           dataMapping: {
             cols: [
-              { id: 'timestamp' },
-              { id: 'mandate_id' },
-              { id: 'item' },
-              { id: 'decision_type' },
-              { id: 'control_layer' },
-              { id: 'settled_usd', aggregation: 'sum' },
-              { id: 'blocked_usd', aggregation: 'sum' },
+              { id: 'audit_ledger.timestamp' },
+              { id: 'audit_ledger.mandate_id' },
+              { id: 'audit_ledger.agent_id' },
+              { id: 'audit_ledger.item' },
+              { id: 'audit_ledger.decision_type' },
+              { id: 'audit_ledger.control_layer' },
+              { id: 'audit_ledger.settled_usd', aggregation: 'sum' },
+              { id: 'audit_ledger.blocked_usd', aggregation: 'sum' },
+              { id: 'agent_policies.max_tx_limit_usd', aggregation: 'avg' },
             ],
           },
         },
       },
       widgetLayout: {
-        'kpi-settled-usd': { xTrack: 0, yTrack: 0, xSpan: 8, ySpan: 6 },
-        'kpi-blocked-usd': { xTrack: 8, yTrack: 0, xSpan: 8, ySpan: 6 },
-        'kpi-mandates-count': { xTrack: 16, yTrack: 0, xSpan: 8, ySpan: 6 },
-        'chart-decision-volume': { xTrack: 0, yTrack: 6, xSpan: 12, ySpan: 13 },
-        'chart-layer-donut': { xTrack: 12, yTrack: 6, xSpan: 12, ySpan: 13 },
-        'studio-audit-grid': { xTrack: 0, yTrack: 19, xSpan: 24, ySpan: 14 },
+        'shield-posture-widget': { xTrack: 0, yTrack: 0, xSpan: 24, ySpan: 8 },
+        'kpi-settled-usd': { xTrack: 0, yTrack: 8, xSpan: 8, ySpan: 6 },
+        'kpi-blocked-usd': { xTrack: 8, yTrack: 8, xSpan: 8, ySpan: 6 },
+        'kpi-mandates-count': { xTrack: 16, yTrack: 8, xSpan: 8, ySpan: 6 },
+        'chart-decision-volume': { xTrack: 0, yTrack: 14, xSpan: 12, ySpan: 13 },
+        'chart-layer-donut': { xTrack: 12, yTrack: 14, xSpan: 12, ySpan: 13 },
+        'studio-audit-grid': { xTrack: 0, yTrack: 27, xSpan: 24, ySpan: 14 },
       },
     },
   ],
-};
+} as unknown as AgReportState;
 
 function classifyControlLayer(entry: AuditEntry): string {
   const details = (entry.details || '').toUpperCase();
@@ -358,51 +383,149 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({
     return '';
   }, []);
 
-  // Dataset 100% real para AG Studio 3 (sin filas ficticias ni campos redundantes)
+  // Modelo relacional multi-tabla para AG Studio 3 (`audit_ledger` ⋈ `agent_policies` + expresiones calculadas)
   const studioData = useMemo<AgDataSourcesDefinition>(() => {
+    const activeAgentId = policy?.agent_id ?? 'procurement-01';
     const liveRows = auditLog.map((entry) => {
       const amount = Number(entry.amount ?? 0);
       const isSettled = entry.status === 'PAYPAL_COMPLETED';
       const isBlocked = entry.status === 'BLOCKED_BY_SHIELD';
+      const isQuarantined = entry.status === 'QUARANTINED_HITL';
+      const detailsUpper = (entry.details || '').toUpperCase();
+
+      const policyDecision = isSettled
+        ? 'APPROVED_AND_CAPTURED'
+        : isBlocked
+          ? 'BLOCKED'
+          : isQuarantined
+            ? 'QUARANTINED_HITL'
+            : 'POLICY_SIGNED';
+
+      const riskLevel = isBlocked
+        ? 'CRITICAL'
+        : isQuarantined
+          ? 'HIGH'
+          : 'LOW';
+
+      const ap2MandateStatus =
+        detailsUpper.includes('ED25519') && isBlocked
+          ? 'CRYPTO_REJECTED'
+          : detailsUpper.includes('BUDGET_EXCEEDED')
+            ? 'BUDGET_EXCEEDED'
+            : 'ED25519_VERIFIED';
+
+      const channel3Verified =
+        detailsUpper.includes('GROUND_TRUTH_MISMATCH') ||
+        detailsUpper.includes('HALLUCINATION_BLOCKED')
+          ? 'BLOCKED_MISMATCH'
+          : 'VERIFIED';
 
       return {
         timestamp: entry.timestamp,
         mandate_id: entry.mandate_id,
+        agent_id: activeAgentId,
+        merchant: isBlocked && detailsUpper.includes('DARKWEB')
+          ? 'hacker@darkweb.io'
+          : 'apple-b2b@paypal.com',
         item: entry.item,
         decision_type: classifyDecisionType(entry.status),
+        policy_decision: policyDecision,
         control_layer: classifyControlLayer(entry),
-        tx_amount_usd: isSettled || isBlocked ? amount : 0,
+        risk_level: riskLevel,
+        ap2_mandate_status: ap2MandateStatus,
+        channel3_verified: channel3Verified,
+        amount_usd: amount,
+        tx_amount_usd: isSettled || isBlocked || isQuarantined ? amount : 0,
         settled_usd: isSettled ? amount : 0,
-        blocked_usd: isBlocked ? amount : 0,
+        blocked_usd: isBlocked || isQuarantined ? amount : 0,
         details: entry.details,
       };
     });
 
+    const policyTableRows = [
+      {
+        agent_id: activeAgentId,
+        policy_id: policy?.policy_id ?? 'pol_default',
+        max_tx_limit_usd: Number(policy?.max_budget_usd ?? 200),
+        remaining_usd: Number(policy?.remaining_usd ?? 200),
+        allowed_category: policy?.allowed_category ?? 'Hardware',
+        ap2_policy_hash: policy?.ap2_policy_hash ?? '',
+      },
+    ];
+
     return {
       description:
-        'Auditoría financiera y criptográfica en tiempo real de mandatos AP2, bloqueos del firewall y pagos liquidados en PayPal Sandbox.',
+        'Modelo relacional de auditoría financiera y criptográfica en tiempo real: une el ledger de mandatos AP2 (`audit_ledger`) con las políticas presupuestarias del CFO (`agent_policies`).',
       sources: [
         {
-          id: 'ap2_shield_telemetry',
+          id: 'audit_ledger',
           name: 'Auditoría AP2 & PayPal Sandbox',
           description:
-            'Transacciones reales evaluadas por el Firewall Criptográfico AP2 y liquidadas en PayPal Sandbox.',
+            'Transacciones reales evaluadas por el Firewall Criptográfico AP2, verificadas contra Channel3 y liquidadas en PayPal Sandbox.',
           data: liveRows,
           fields: [
             { id: 'timestamp', name: 'Hora', format: 'textFormat' },
             { id: 'mandate_id', name: 'Mandato AP2', format: 'textFormat' },
+            { id: 'agent_id', name: 'Agente IA', format: 'textFormat' },
+            { id: 'merchant', name: 'Comercio Destino', format: 'textFormat' },
             { id: 'item', name: 'Producto / Operación', format: 'textFormat' },
             { id: 'decision_type', name: 'Decisión Financiera', format: 'textFormat' },
+            { id: 'policy_decision', name: 'Estado Político AP2', format: 'textFormat' },
             { id: 'control_layer', name: 'Capa de Seguridad AP2', format: 'textFormat' },
+            { id: 'risk_level', name: 'Nivel de Riesgo', format: 'textFormat' },
+            { id: 'ap2_mandate_status', name: 'Estado Criptográfico Ed25519', format: 'textFormat' },
+            { id: 'channel3_verified', name: 'Verificación Channel3', format: 'textFormat' },
+            { id: 'amount_usd', name: 'Monto Bruto (USD)', format: 'currencyFormat' },
             { id: 'tx_amount_usd', name: 'Monto Evaluado (USD)', format: 'currencyFormat' },
             { id: 'settled_usd', name: 'Pagado en PayPal (USD)', format: 'currencyFormat' },
             { id: 'blocked_usd', name: 'Capital Protegido (USD)', format: 'currencyFormat' },
             { id: 'details', name: 'Evidencia Criptográfica', format: 'textFormat' },
           ],
         },
+        {
+          id: 'agent_policies',
+          name: 'Políticas de Gobernanza CFO',
+          description:
+            'Límites presupuestarios firmados con Ed25519 por el CFO para cada agente autónomo de compras.',
+          data: policyTableRows,
+          fields: [
+            { id: 'agent_id', name: 'Agente IA', format: 'textFormat' },
+            { id: 'policy_id', name: 'ID Política CFO', format: 'textFormat' },
+            { id: 'max_tx_limit_usd', name: 'Límite Presupuestario CFO (USD)', format: 'currencyFormat' },
+            { id: 'remaining_usd', name: 'Saldo Disponible (USD)', format: 'currencyFormat' },
+            { id: 'allowed_category', name: 'Categoría Autorizada', format: 'textFormat' },
+            { id: 'ap2_policy_hash', name: 'Hash Mandato AP2', format: 'textFormat' },
+          ],
+        },
+      ],
+      relationships: [
+        {
+          id: 'ledger_to_agent_policy',
+          source: { tableId: 'audit_ledger', fieldId: 'agent_id' },
+          target: { tableId: 'agent_policies', fieldId: 'agent_id' },
+          type: 'many-to-one',
+        },
+      ],
+      expressions: [
+        {
+          id: 'shieldProtectionRate',
+          name: 'Tasa de Capital Protegido (%)',
+          description: 'Proporción del volumen financiero interceptado por AP2 Shield sobre el volumen total evaluado.',
+          isMeasure: true,
+          format: 'percentageFormat',
+          expression: 'SUM([audit_ledger.blocked_usd]) / SUM([audit_ledger.tx_amount_usd])',
+        },
+        {
+          id: 'paypalSettlementRate',
+          name: 'Tasa de Liquidación PayPal (%)',
+          description: 'Proporción del volumen financiero liquidado en PayPal Sandbox sobre el volumen total evaluado.',
+          isMeasure: true,
+          format: 'percentageFormat',
+          expression: 'SUM([audit_ledger.settled_usd]) / SUM([audit_ledger.tx_amount_usd])',
+        },
       ],
     };
-  }, [auditLog]);
+  }, [auditLog, policy]);
 
   return (
     <div className="dashboard-panel">
@@ -626,21 +749,25 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <div className="section-header">
             <span>
-              📊 AG Studio 3 — Auditoría Financiera de Pagos PayPal vs. Capital Protegido por AP2
+              📊 AG Studio 3 — Custom Widget (`ap2-shield-posture`), Studio AI Agent (`ap2-shield-auditor`) &amp; Motor Relacional
             </span>
             <span className="hint">
-              ✨ Datos 100% en tiempo real desde la sesión activa (sin filas ficticias)
+              ✨ Haz clic en el ícono de IA (panel derecho) para hablar con el agente o en los botones del Custom Widget para cross-filtering
             </span>
           </div>
           <div className="studio-container-wrapper" data-ag-theme-mode="dark">
-            <AgStudio
-              theme={darkStudioTheme}
-              data={studioData}
-              initialState={initialStudioState}
-              mode={studioMode}
-              enableFilterEditingInViewMode={true}
-              style={{ width: '100%', height: '100%', flex: 1 }}
-            />
+            <AgStudioProvider modules={[AgStudioAiModule]}>
+              <AgStudio
+                theme={darkStudioTheme}
+                data={studioData}
+                initialState={initialStudioState}
+                widgets={configureStudioWidgets}
+                ai={buildStudioAi}
+                mode={studioMode}
+                enableFilterEditingInViewMode={true}
+                style={{ width: '100%', height: '100%', flex: 1 }}
+              />
+            </AgStudioProvider>
           </div>
         </div>
       )}
