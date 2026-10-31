@@ -81,14 +81,44 @@ async def _shield_request(method: str, path: str, timeout: float = 20.0, **kwarg
 SHIELD_BASE_URL = _get_shield_base_url()
 
 
-async def search_catalog_channel3(query: str) -> dict:
+async def search_catalog_channel3(
+    query: str,
+    max_price: float | None = None,
+) -> dict:
     """
-    Busca productos reales en tiempo real usando la API de Channel3 (100M+ productos).
+    Busca productos reales en tiempo real usando la API de Channel3 (100M+ productos, 25,000+ retailers).
+    Devuelve títulos, imágenes, precios, disponibilidad (`availability`), enlaces de compra (`buy_url`),
+    características (`key_features`), variantes (`variants`) y el correo PayPal Sandbox verificado.
 
     Args:
         query: Producto a buscar en inglés o español (ej. 'ergonomic office chair', '4k monitor', 'mechanical keyboard').
+        max_price: (Opcional) Filtro de precio máximo en USD (`SearchFilters(price=SearchFilterPrice(max_price=...))`).
     """
-    res = await _shield_request("GET", "/api/catalog/search", timeout=20.0, params={"q": query})
+    params: dict[str, Any] = {"q": query}
+    if max_price is not None and float(max_price) > 0:
+        params["max_price"] = float(max_price)
+    res = await _shield_request("GET", "/api/catalog/search", timeout=20.0, params=params)
+    res.raise_for_status()
+    return res.json()
+
+
+async def enrich_and_recommend_channel3(
+    sku: str,
+    max_price: float | None = None,
+) -> dict:
+    """
+    Enriquece un SKU con `products.retrieve` de Channel3 (descripción completa, `key_features`,
+    `availability`, `buy_url`, `variants`) y obtiene recomendaciones de productos similares con
+    `products.find_similar` (opcionalmente filtradas por `max_price` para ajustarse al presupuesto del CFO).
+
+    Args:
+        sku: ID/SKU del producto de Channel3 a enriquecer y usar como semilla de recomendación.
+        max_price: (Opcional) Presupuesto máximo en USD para filtrar las recomendaciones similares.
+    """
+    params: dict[str, Any] = {}
+    if max_price is not None and float(max_price) > 0:
+        params["max_price"] = float(max_price)
+    res = await _shield_request("GET", f"/api/catalog/enrich/{sku}", timeout=20.0, params=params)
     res.raise_for_status()
     return res.json()
 
@@ -509,6 +539,7 @@ root_agent = Agent(
     """,
     tools=[
         search_catalog_channel3,
+        enrich_and_recommend_channel3,
         get_ag_grid_policy_state,
         execute_ap2_checkout,
         get_bryntum_taskboard_and_graph_state,

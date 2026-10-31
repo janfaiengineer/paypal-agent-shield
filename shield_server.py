@@ -22,6 +22,12 @@ except ImportError:
         AsyncChannel3Client = None
 
 try:
+    from channel3_sdk import SearchFilters, SearchFilterPrice
+except ImportError:
+    SearchFilters = None
+    SearchFilterPrice = None
+
+try:
     from render import RenderAsync
 except ImportError:
     RenderAsync = None
@@ -340,19 +346,115 @@ async def update_runtime_config(cfg: CredentialsConfig):
     }
 
 
-@app.get("/api/catalog/search")
-async def search_live_channel3(q: str = "office chair"):
+def _normalize_and_register_channel3_product(prod) -> dict | None:
     """
-    Consulta productos reales en Channel3 API y registra sus precios oficiales
-    en TRUSTED_CATALOG para mantener la validación Anti-Alucinaciones del Shield.
+    Extrae los metadatos normalizados del Product Graph de Channel3 (título, precio,
+    disponibilidad, condición, buy_url, variantes, key_features e imagen) y registra
+    su precio y comercio oficial en TRUSTED_CATALOG (Oráculo Anti-Alucinaciones Gate 3).
+    """
+    raw_price = None
+    compare_at_price = None
+    currency = "USD"
+    availability = "InStock"
+    condition = "new"
+    buy_url = None
+
+    brand_list = getattr(prod, "brands", None) or []
+    first_brand = getattr(brand_list[0], "name", None) if brand_list else None
+    merchant_name = getattr(prod, "brand_name", None) or first_brand or "verified-retailer"
+
+    if getattr(prod, "offers", None) and len(prod.offers) > 0:
+        offer = prod.offers[0]
+        raw_price = getattr(offer.price, "price", offer.price)
+        compare_at_price = getattr(offer.price, "compare_at_price", None)
+        currency = str(getattr(offer.price, "currency", "USD") or "USD")
+        availability = str(getattr(offer, "availability", "InStock") or "InStock")
+        condition = str(getattr(offer, "condition", "new") or "new")
+        buy_url = getattr(offer, "url", None)
+        merchant_name = (
+            getattr(offer, "merchant_name", None)
+            or getattr(offer, "domain", None)
+            or merchant_name
+        )
+    elif getattr(prod, "price", None):
+        raw_price = getattr(prod.price, "price", prod.price)
+        compare_at_price = getattr(prod.price, "compare_at_price", None)
+        currency = str(getattr(prod.price, "currency", "USD") or "USD")
+
+    if not raw_price or float(raw_price) <= 0:
+        return None
+
+    price_usd = round(float(raw_price), 2)
+    sku = str(prod.id)
+    slug = re.sub(r"[^a-z0-9]+", "-", merchant_name.lower()).strip("-") or "merchant"
+    sandbox_payee = f"{slug}@sandbox.paypal.com"
+
+    images_list = getattr(prod, "images", None) or []
+    first_image = getattr(images_list[0], "url", None) if images_list else None
+    image_url = getattr(prod, "image_url", None) or first_image
+
+    key_features = list(getattr(prod, "key_features", None) or [])[:4]
+    raw_variants = getattr(prod, "variants", None)
+    variants_summary = []
+    if raw_variants and getattr(raw_variants, "options", None):
+        for opt in raw_variants.options[:3]:
+            opt_name = getattr(opt, "name", None)
+            if opt_name:
+                variants_summary.append(str(opt_name))
+
+    # CRÍTICO: Registramos la verdad oficial en memoria del Shield (Anti-Alucinación Gate 3)
+    TRUSTED_CATALOG[sku] = {
+        "price": price_usd,
+        "paypal_email": sandbox_payee,
+        "availability": availability,
+        "buy_url": buy_url,
+        "brand_or_merchant": merchant_name,
+    }
+
+    return {
+        "sku": sku,
+        "name": prod.title,
+        "brand_or_merchant": merchant_name,
+        "price": price_usd,
+        "compare_at_price": round(float(compare_at_price), 2) if compare_at_price else None,
+        "currency": currency,
+        "availability": availability,
+        "condition": condition,
+        "buy_url": buy_url,
+        "key_features": key_features,
+        "variants": variants_summary,
+        "paypal_email": sandbox_payee,
+        "image_url": image_url,
+        "source": "LIVE_CHANNEL3_API",
+    }
+
+
+@app.get("/api/catalog/search")
+async def search_live_channel3(q: str = "office chair", max_price: float | None = None):
+    """
+    Consulta productos reales en Channel3 API (`products.search` con `SearchFilters`)
+    y registra sus precios oficiales, disponibilidad y buy links en TRUSTED_CATALOG
+    para mantener la validación Anti-Alucinaciones del Shield.
     """
     c3_key = os.environ.get("CHANNEL3_API_KEY", "").strip()
 
     # 1. Si no hay API Key de Channel3 configurada, usa el catálogo semilla de respaldo
     if not c3_key or "tu_api_key" in c3_key:
         fallback_items = [
-            {"sku": sku, "name": sku, "price": data["price"], "paypal_email": data["paypal_email"], "source": "LOCAL_FALLBACK"}
+            {
+                "sku": sku,
+                "name": sku,
+                "price": data["price"],
+                "availability": data.get("availability", "InStock"),
+                "condition": "new",
+                "buy_url": data.get("buy_url", f"https://trychannel3.com/products/{sku}"),
+                "key_features": ["Verified Ground-Truth SKU"],
+                "variants": [],
+                "paypal_email": data["paypal_email"],
+                "source": "LOCAL_FALLBACK",
+            }
             for sku, data in TRUSTED_CATALOG.items()
+            if max_price is None or float(data["price"]) <= float(max_price)
         ]
         _upsert_taskboard_card({
             "id": "c3_sync_seed",
@@ -372,12 +474,18 @@ async def search_live_channel3(q: str = "office chair"):
         await broadcast_state()
         return {"mode": "FALLBACK_CATALOG", "products": fallback_items}
 
-    # 2. Búsqueda real en el Product Graph de Channel3 (100M+ productos)
+    # 2. Búsqueda real en el Product Graph de Channel3 (100M+ productos, 25,000+ retailers)
     try:
         client = AsyncChannel3Client(api_key=c3_key, timeout=15.0)
-        response = await client.products.search(query=q, limit=5)
+        search_kwargs = {"query": q, "limit": 5}
+        if max_price is not None and float(max_price) > 0 and SearchFilters and SearchFilterPrice:
+            search_kwargs["filters"] = SearchFilters(
+                price=SearchFilterPrice(max_price=float(max_price))
+            )
 
-        # Soporta tanto respuesta directa (.products) como Pager (.items / .response.products)
+        response = await client.products.search(**search_kwargs)
+
+        # Soporta tanto respuesta directa (.products) como AsyncPager (.items / .response.products)
         raw_products = getattr(response, "products", None) or getattr(response, "items", None)
         if not raw_products and hasattr(response, "response"):
             raw_products = getattr(response.response, "products", None)
@@ -385,51 +493,9 @@ async def search_live_channel3(q: str = "office chair"):
 
         live_products = []
         for prod in raw_products:
-            # Extraer el precio real de la primera oferta disponible
-            raw_price = None
-            brand_list = getattr(prod, "brands", None) or []
-            first_brand = getattr(brand_list[0], "name", None) if brand_list else None
-            merchant_name = getattr(prod, "brand_name", None) or first_brand or "verified-retailer"
-
-            if getattr(prod, "offers", None) and len(prod.offers) > 0:
-                offer = prod.offers[0]
-                # Soporta tanto offer.price numérico como objeto Price según versión del SDK
-                raw_price = getattr(offer.price, "price", offer.price)
-                merchant_name = (
-                    getattr(offer, "merchant_name", None)
-                    or getattr(offer, "domain", None)
-                    or merchant_name
-                )
-            elif getattr(prod, "price", None):
-                raw_price = getattr(prod.price, "price", prod.price)
-
-            if not raw_price or float(raw_price) <= 0:
-                continue
-
-            price_usd = round(float(raw_price), 2)
-            sku = str(prod.id)
-            slug = re.sub(r"[^a-z0-9]+", "-", merchant_name.lower()).strip("-") or "merchant"
-            sandbox_payee = f"{slug}@sandbox.paypal.com"
-
-            images_list = getattr(prod, "images", None) or []
-            first_image = getattr(images_list[0], "url", None) if images_list else None
-            image_url = getattr(prod, "image_url", None) or first_image
-
-            # CRÍTICO: Registramos la verdad oficial en memoria del Shield (Anti-Alucinación)
-            TRUSTED_CATALOG[sku] = {
-                "price": price_usd,
-                "paypal_email": sandbox_payee
-            }
-
-            live_products.append({
-                "sku": sku,
-                "name": prod.title,
-                "brand_or_merchant": merchant_name,
-                "price": price_usd,
-                "paypal_email": sandbox_payee,
-                "image_url": image_url,
-                "source": "LIVE_CHANNEL3_API"
-            })
+            normalized = _normalize_and_register_channel3_product(prod)
+            if normalized:
+                live_products.append(normalized)
 
         if live_products:
             _upsert_taskboard_card({
@@ -449,8 +515,8 @@ async def search_live_channel3(q: str = "office chair"):
                 "gate_code": "GROUND_TRUTH_SYNCED",
                 "ed25519_sig": state["policies"]["procurement-01"]["cfo_signature"][:18] + "...",
                 "badge": "LIVE Channel3 Graph",
-                "details": f"{len(live_products)} productos reales registrados en Ground-Truth.",
-                "description": f"{len(live_products)} productos reales registrados en Ground-Truth.",
+                "details": f"{len(live_products)} productos reales registrados en Ground-Truth ({live_products[0].get('availability', 'InStock')}).",
+                "description": f"{len(live_products)} productos reales registrados en Ground-Truth ({live_products[0].get('availability', 'InStock')}).",
                 "timestamp": now_str(),
                 "updated_at": now_str(),
                 "hitl_quarantined": False,
@@ -462,6 +528,69 @@ async def search_live_channel3(q: str = "office chair"):
 
     except Exception as e:
         return {"mode": "CHANNEL3_ERROR_FALLBACK", "error": str(e), "products": []}
+
+
+@app.get("/api/catalog/enrich/{sku}")
+async def enrich_and_recommend_channel3(sku: str, max_price: float | None = None):
+    """
+    Product Enrichment & AI Recommendations con Channel3 (`products.retrieve` + `products.find_similar`):
+    1. Enriquecimiento en vivo de un SKU (`title`, `description`, `key_features`, `availability`, `buy_url`, `variants`).
+    2. Recomendación de productos similares (`find_similar`) opcionalmente filtrados por `max_price` (ej. presupuesto CFO).
+    """
+    c3_key = os.environ.get("CHANNEL3_API_KEY", "").strip()
+    if not c3_key or "tu_api_key" in c3_key or AsyncChannel3Client is None:
+        item = TRUSTED_CATALOG.get(sku)
+        return {
+            "mode": "FALLBACK_ENRICHMENT",
+            "enriched_product": {
+                "sku": sku,
+                "price": item["price"] if item else None,
+                "paypal_email": item["paypal_email"] if item else None,
+                "availability": "InStock",
+            } if item else None,
+            "similar_recommendations": [
+                {"sku": k, "name": k, "price": v["price"], "paypal_email": v["paypal_email"]}
+                for k, v in TRUSTED_CATALOG.items()
+                if k != sku and (max_price is None or float(v["price"]) <= float(max_price))
+            ],
+        }
+
+    try:
+        client = AsyncChannel3Client(api_key=c3_key, timeout=15.0)
+        prod_detail = await client.products.retrieve(sku)
+        enriched = _normalize_and_register_channel3_product(prod_detail)
+        if enriched and getattr(prod_detail, "description", None):
+            enriched["description"] = str(prod_detail.description)[:280]
+
+        sim_kwargs = {"product_id": sku, "limit": 4}
+        if max_price is not None and float(max_price) > 0 and SearchFilters and SearchFilterPrice:
+            sim_kwargs["filters"] = SearchFilters(
+                price=SearchFilterPrice(max_price=float(max_price))
+            )
+
+        sim_resp = await client.products.find_similar(**sim_kwargs)
+        raw_sim = getattr(sim_resp, "products", None) or getattr(sim_resp, "items", None) or []
+        if not raw_sim and hasattr(sim_resp, "response"):
+            raw_sim = getattr(sim_resp.response, "products", None) or []
+
+        recommendations = []
+        for sp in raw_sim:
+            norm_sim = _normalize_and_register_channel3_product(sp)
+            if norm_sim:
+                recommendations.append(norm_sim)
+
+        return {
+            "mode": "LIVE_CHANNEL3_ENRICH_AND_RECOMMEND",
+            "enriched_product": enriched,
+            "similar_recommendations": recommendations,
+        }
+    except Exception as e:
+        return {
+            "mode": "CHANNEL3_ENRICH_ERROR",
+            "error": str(e),
+            "enriched_product": None,
+            "similar_recommendations": [],
+        }
 
 
 @app.post("/api/policy")
