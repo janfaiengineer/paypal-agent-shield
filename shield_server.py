@@ -38,12 +38,13 @@ from ap2_crypto import (
     sign_cfo_policy,
     verify_cfo_policy,
     compute_policy_hash,
+    sign_agent_checkout,
     verify_agent_checkout,
     get_public_key_hex,
     CFO_PUBLIC_KEY,
     AGENT_PUBLIC_KEY,
 )
-from ap2_shield_agent.agent import root_agent
+from ap2_shield_agent.agent import root_agent, run_adk_checkout_graph_workflow
 
 app = FastAPI(title="PayPal Agent Shield — Unified Console")
 paypal_sdk = PayPalAPIMaticProcessor()
@@ -96,6 +97,13 @@ class ChatRequest(BaseModel):
     session_id: str = "Unified-Session-01"
 
 
+class QuarantineResolveRequest(BaseModel):
+    mandate_id: str = ""
+    card_id: str = ""
+    target_column: str = "PAYPAL_SETTLED"
+    cfo_note: str = ""
+
+
 class CredentialsConfig(BaseModel):
     google_api_key: str = ""
     gemini_model: str = ""
@@ -121,7 +129,79 @@ state = {
             "agent_pubkey": get_public_key_hex(AGENT_PUBLIC_KEY)[:16],
         }
     },
-    "audit_log": []
+    "audit_log": [],
+    "taskboard_cards": [
+        {
+            "id": "c3_sync_seed",
+            "mandate_id": "c3_sync_seed",
+            "name": "Channel3 Ground-Truth Registry",
+            "sku": "CHAIR-ERG-01 (+3 SKUs)",
+            "amount": 120.00,
+            "amount_usd": 120.00,
+            "c3_price_usd": 120.00,
+            "merchant": "office-supply@sandbox.paypal.com",
+            "status": "CHANNEL3_DISCOVERY",
+            "prio": "low",
+            "adk_node": "adk_node_channel3_ground_truth",
+            "adk_route": "ground_truth_locked",
+            "adk_nodes": ["START", "search_catalog_channel3"],
+            "gate_code": "GROUND_TRUTH_SYNCED",
+            "ed25519_sig": _init_sig[:18] + "...",
+            "badge": "100M+ Product Graph",
+            "details": "Precios y SKUs verificados contra alucinaciones del LLM.",
+            "description": "Precios y SKUs verificados contra alucinaciones del LLM.",
+            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "updated_at": datetime.now().strftime("%H:%M:%S"),
+            "hitl_quarantined": False,
+            "can_approve_hitl": False,
+        },
+        {
+            "id": "ap2_chk_hitl_demo",
+            "mandate_id": "ap2_chk_hitl_demo",
+            "name": "Pro Workstation Laptop 16",
+            "sku": "LAP-PRO-16",
+            "amount": 799.00,
+            "amount_usd": 799.00,
+            "c3_price_usd": 799.00,
+            "shortfall_usd": 599.00,
+            "merchant": "monitors-direct@sandbox.paypal.com",
+            "status": "QUARANTINED",
+            "prio": "high",
+            "adk_node": "adk_node_cfo_hitl_quarantine",
+            "adk_route": "route_cfo_hitl_quarantine",
+            "adk_nodes": [
+                "adk_node_crypto_gate",
+                "adk_node_channel3_ground_truth",
+                "adk_node_policy_budget_gate",
+                "adk_node_cfo_hitl_quarantine",
+            ],
+            "gate_code": "BUDGET_EXCEEDED_HITL",
+            "ed25519_sig": _init_sig[:18] + "...",
+            "badge": "⏳ HITL: Drag to Settle (+$599.00)",
+            "details": "Pausado en nodo ADK `adk_node_cfo_hitl_quarantine`. Arrastra a 'PayPal Sandbox Settled' para auto-firmar Ed25519 y liquidar.",
+            "description": "Pausado en nodo ADK adk_node_cfo_hitl_quarantine ($799.00 > $200.00 saldo AG Grid).",
+            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "updated_at": datetime.now().strftime("%H:%M:%S"),
+            "hitl_quarantined": True,
+            "can_approve_hitl": True,
+        },
+    ],
+    "adk_graph_telemetry": {
+        "workflow_name": "ap2_zero_trust_checkout_graph",
+        "graph_name": "ap2_zero_trust_checkout_graph",
+        "last_mandate_id": "ap2_chk_hitl_demo",
+        "active_node": "adk_node_cfo_hitl_quarantine",
+        "active_route": "route_cfo_hitl_quarantine",
+        "last_route": "route_cfo_hitl_quarantine",
+        "visited_nodes": [
+            "adk_node_crypto_gate",
+            "adk_node_channel3_ground_truth",
+            "adk_node_policy_budget_gate",
+            "adk_node_cfo_hitl_quarantine",
+        ],
+        "bryntum_column": "QUARANTINED",
+        "updated_at": datetime.now().strftime("%H:%M:%S"),
+    },
 }
 
 subscribers: List[asyncio.Queue] = []
@@ -129,6 +209,18 @@ subscribers: List[asyncio.Queue] = []
 
 def now_str() -> str:
     return datetime.now().strftime("%H:%M:%S")
+
+
+def _upsert_taskboard_card(card: dict) -> None:
+    cards = state["taskboard_cards"]
+    cid = card.get("id") or card.get("mandate_id")
+    card["id"] = cid
+    card["mandate_id"] = cid
+    for i, existing in enumerate(cards):
+        if existing.get("id") == cid:
+            cards[i] = card
+            return
+    cards.insert(0, card)
 
 
 def enrich_policy_hash(p: dict) -> str:
@@ -142,7 +234,12 @@ def enrich_policy_hash(p: dict) -> str:
 async def broadcast_state():
     p = state["policies"]["procurement-01"]
     enrich_policy_hash(p)
-    snapshot = json.dumps({"policy": p, "audit_log": state["audit_log"]})
+    snapshot = json.dumps({
+        "policy": p,
+        "audit_log": state["audit_log"],
+        "taskboard_cards": state["taskboard_cards"],
+        "adk_graph_telemetry": state["adk_graph_telemetry"],
+    })
     for q in subscribers:
         await q.put(snapshot)
 
@@ -165,7 +262,12 @@ async def serve_dashboard():
 async def get_state():
     p = state["policies"]["procurement-01"]
     enrich_policy_hash(p)
-    return {"policy": p, "audit_log": state["audit_log"]}
+    return {
+        "policy": p,
+        "audit_log": state["audit_log"],
+        "taskboard_cards": state["taskboard_cards"],
+        "adk_graph_telemetry": state["adk_graph_telemetry"],
+    }
 
 
 def _has_valid_key(env_name: str) -> bool:
@@ -252,6 +354,22 @@ async def search_live_channel3(q: str = "office chair"):
             {"sku": sku, "name": sku, "price": data["price"], "paypal_email": data["paypal_email"], "source": "LOCAL_FALLBACK"}
             for sku, data in TRUSTED_CATALOG.items()
         ]
+        _upsert_taskboard_card({
+            "id": "c3_sync_seed",
+            "mandate_id": "c3_sync_seed",
+            "name": f"Channel3 Search: '{q}'",
+            "sku": f"{len(fallback_items)} Verified SKUs",
+            "amount": fallback_items[0]["price"] if fallback_items else 0.0,
+            "merchant": fallback_items[0]["paypal_email"] if fallback_items else "sandbox.paypal.com",
+            "status": "CHANNEL3_DISCOVERY",
+            "adk_route": "ground_truth_locked",
+            "adk_nodes": ["START", "search_catalog_channel3"],
+            "badge": "Ground-Truth Synced",
+            "details": f"Catálogo sincronizado ({len(fallback_items)} SKUs). Anti-alucinación activa.",
+            "timestamp": now_str(),
+            "hitl_quarantined": False,
+        })
+        await broadcast_state()
         return {"mode": "FALLBACK_CATALOG", "products": fallback_items}
 
     # 2. Búsqueda real en el Product Graph de Channel3 (100M+ productos)
@@ -313,6 +431,33 @@ async def search_live_channel3(q: str = "office chair"):
                 "source": "LIVE_CHANNEL3_API"
             })
 
+        if live_products:
+            _upsert_taskboard_card({
+                "id": "c3_sync_seed",
+                "mandate_id": "c3_sync_seed",
+                "name": f"Channel3 Live: {live_products[0]['name'][:34]}",
+                "sku": f"{live_products[0]['sku']} (+{max(0, len(live_products)-1)})",
+                "amount": live_products[0]["price"],
+                "amount_usd": live_products[0]["price"],
+                "c3_price_usd": live_products[0]["price"],
+                "merchant": live_products[0]["paypal_email"],
+                "status": "CHANNEL3_DISCOVERY",
+                "prio": "low",
+                "adk_node": "adk_node_channel3_ground_truth",
+                "adk_route": "ground_truth_locked",
+                "adk_nodes": ["START", "search_catalog_channel3"],
+                "gate_code": "GROUND_TRUTH_SYNCED",
+                "ed25519_sig": state["policies"]["procurement-01"]["cfo_signature"][:18] + "...",
+                "badge": "LIVE Channel3 Graph",
+                "details": f"{len(live_products)} productos reales registrados en Ground-Truth.",
+                "description": f"{len(live_products)} productos reales registrados en Ground-Truth.",
+                "timestamp": now_str(),
+                "updated_at": now_str(),
+                "hitl_quarantined": False,
+                "can_approve_hitl": False,
+            })
+            await broadcast_state()
+
         return {"mode": "LIVE_CHANNEL3_API", "products": live_products}
 
     except Exception as e:
@@ -351,63 +496,17 @@ async def update_policy(update: PolicyUpdate):
     return {"status": "UPDATED", "policy": new_policy}
 
 
-@app.post("/api/checkout")
-async def process_ap2_checkout(req: CheckoutRequest):
-    p = state["policies"].get(req.agent_id)
-    expected_hash = enrich_policy_hash(p)
-
-    # 1. Verificar firma Ed25519 del CFO
-    if not verify_cfo_policy(p["policy_id"], p["agent_id"], p["max_budget_usd"], p["allowed_category"], p["cfo_signature"]):
-        reason = "CRYPTO_ERROR: Firma Ed25519 del CFO inválida."
-        state["audit_log"].insert(0, {"timestamp": now_str(), "mandate_id": req.mandate_id, "item": req.product_name, "amount": req.total_amount, "status": "BLOCKED_BY_SHIELD", "details": reason})
-        await broadcast_state()
-        return {"authorized": False, "error": reason, "remaining_usd": p["remaining_usd"]}
-
-    # 2. Verificar firma Ed25519 del Agente sobre el Checkout Mandate
-    agent_sig_valid = verify_agent_checkout(
-        mandate_id=req.mandate_id,
-        agent_id=req.agent_id,
-        parent_policy_hash=req.parent_policy_hash,
-        sku=req.sku,
-        total_amount=req.total_amount,
-        merchant_paypal_email=req.merchant_paypal_email,
-        signature_b64=req.agent_signature
-    )
-    if not agent_sig_valid:
-        reason = "ED25519_INVALID_SIGNATURE: Adulteración detectada en tránsito (Firma no coincide con el payload)."
-        state["audit_log"].insert(0, {"timestamp": now_str(), "mandate_id": req.mandate_id, "item": req.product_name, "amount": req.total_amount, "status": "BLOCKED_BY_SHIELD", "details": reason})
-        await broadcast_state()
-        return {"authorized": False, "error": reason, "remaining_usd": p["remaining_usd"]}
-
-    # 3. Validar Ground-Truth del Catálogo (Anti-Alucinaciones del LLM)
-    trusted_item = TRUSTED_CATALOG.get(req.sku)
-    if not trusted_item:
-        reason = f"HALLUCINATION_BLOCKED: El SKU '{req.sku}' no existe en Channel3."
-        state["audit_log"].insert(0, {"timestamp": now_str(), "mandate_id": req.mandate_id, "item": req.product_name, "amount": req.total_amount, "status": "BLOCKED_BY_SHIELD", "details": reason})
-        await broadcast_state()
-        return {"authorized": False, "error": reason, "remaining_usd": p["remaining_usd"]}
-
-    if req.total_amount != trusted_item["price"] or req.merchant_paypal_email != trusted_item["paypal_email"]:
-        reason = f"GROUND_TRUTH_MISMATCH: El agente envió ${req.total_amount:.2f}, pero el precio oficial de {req.sku} es ${trusted_item['price']:.2f}."
-        state["audit_log"].insert(0, {"timestamp": now_str(), "mandate_id": req.mandate_id, "item": req.product_name, "amount": req.total_amount, "status": "BLOCKED_BY_SHIELD", "details": reason})
-        await broadcast_state()
-        return {"authorized": False, "error": reason, "remaining_usd": p["remaining_usd"]}
-
-    # 4. Validar Hash de Política AP2
-    if req.parent_policy_hash != expected_hash:
-        reason = "AP2_HASH_MISMATCH: La política del CFO cambió antes de liquidar."
-        state["audit_log"].insert(0, {"timestamp": now_str(), "mandate_id": req.mandate_id, "item": req.product_name, "amount": req.total_amount, "status": "BLOCKED_BY_SHIELD", "details": reason})
-        await broadcast_state()
-        return {"authorized": False, "error": reason, "remaining_usd": p["remaining_usd"]}
-
-    # 5. Validar Presupuesto Disponible en AG Grid
-    if req.total_amount > p["remaining_usd"]:
-        reason = f"BUDGET_EXCEEDED: Carrito ${req.total_amount:.2f} USD > Disponible en AG Grid ${p['remaining_usd']:.2f} USD"
-        state["audit_log"].insert(0, {"timestamp": now_str(), "mandate_id": req.mandate_id, "item": req.product_name, "amount": req.total_amount, "status": "BLOCKED_BY_SHIELD", "details": reason})
-        await broadcast_state()
-        return {"authorized": False, "error": reason, "remaining_usd": p["remaining_usd"]}
-
-    # 6. Liquidar en PayPal Sandbox vía Render Workflows (o ejecución local como fallback)
+async def _settle_mandate_on_paypal(
+    mandate_id: str,
+    agent_id: str,
+    expected_hash: str,
+    sku: str,
+    product_name: str,
+    total_amount: float,
+    merchant_paypal_email: str,
+    agent_signature: str,
+) -> tuple[dict | None, str, str | None]:
+    """Ejecuta la liquidación en PayPal Sandbox vía Render Workflows o APIMatic SDK local."""
     workflow_engine_note = "LOCAL_INLINE"
     pp_settlement = None
 
@@ -415,14 +514,14 @@ async def process_ap2_checkout(req: CheckoutRequest):
         workflow_slug = os.getenv("RENDER_WORKFLOW_SLUG", "paypal-shield-workflow").strip() or "paypal-shield-workflow"
         task_slug = f"{workflow_slug}/orchestrate_ap2_checkout_workflow"
         workflow_payload = {
-            "mandate_id": req.mandate_id,
-            "agent_id": req.agent_id,
+            "mandate_id": mandate_id,
+            "agent_id": agent_id,
             "parent_policy_hash": expected_hash,
-            "sku": req.sku,
-            "product_name": req.product_name,
-            "total_amount": req.total_amount,
-            "merchant_paypal_email": req.merchant_paypal_email,
-            "agent_signature": req.agent_signature,
+            "sku": sku,
+            "product_name": product_name,
+            "total_amount": total_amount,
+            "merchant_paypal_email": merchant_paypal_email,
+            "agent_signature": agent_signature,
             "paypal_client_id": paypal_sdk.client_id,
             "paypal_client_secret": paypal_sdk.client_secret,
         }
@@ -432,9 +531,7 @@ async def process_ap2_checkout(req: CheckoutRequest):
             wf_result = task_run.results[0] if getattr(task_run, "results", None) else {}
             if not wf_result.get("authorized"):
                 reason = wf_result.get("error", "RENDER_WORKFLOW_REJECTED")
-                state["audit_log"].insert(0, {"timestamp": now_str(), "mandate_id": req.mandate_id, "item": req.product_name, "amount": req.total_amount, "status": "BLOCKED_BY_SHIELD", "details": reason})
-                await broadcast_state()
-                return {"authorized": False, "error": reason, "remaining_usd": p["remaining_usd"]}
+                return None, workflow_engine_note, reason
             pp_settlement = wf_result.get("settlement")
             workflow_engine_note = f"RENDER_WORKFLOW ({task_run.id})"
         except Exception as wf_err:
@@ -444,21 +541,179 @@ async def process_ap2_checkout(req: CheckoutRequest):
         try:
             pp_settlement = await asyncio.to_thread(
                 paypal_sdk.execute_ap2_settlement,
-                mandate_id=req.mandate_id,
+                mandate_id=mandate_id,
                 parent_policy_hash=expected_hash,
-                product_name=req.product_name,
-                amount_usd=req.total_amount,
-                merchant_paypal_email=req.merchant_paypal_email,
+                product_name=product_name,
+                amount_usd=total_amount,
+                merchant_paypal_email=merchant_paypal_email,
             )
         except Exception as e:
-            reason = f"PAYPAL_API_ERROR: {str(e)}"
-            state["audit_log"].insert(0, {"timestamp": now_str(), "mandate_id": req.mandate_id, "item": req.product_name, "amount": req.total_amount, "status": "BLOCKED_BY_SHIELD", "details": reason})
-            await broadcast_state()
-            return {"authorized": False, "error": reason, "remaining_usd": p["remaining_usd"]}
+            return None, workflow_engine_note, f"PAYPAL_API_ERROR: {str(e)}"
 
-    p["remaining_usd"] -= req.total_amount
+    return pp_settlement, workflow_engine_note, None
+
+
+@app.post("/api/checkout")
+async def process_ap2_checkout(req: CheckoutRequest):
+    p = state["policies"].get(req.agent_id)
+    expected_hash = enrich_policy_hash(p)
+    trusted_item = TRUSTED_CATALOG.get(req.sku)
+
+    # 1. Ejecutar el Grafo Determinista de Google ADK 2.0 (`ap2_zero_trust_checkout_graph`)
+    graph_input = {
+        "mandate_id": req.mandate_id,
+        "agent_id": req.agent_id,
+        "parent_policy_hash": req.parent_policy_hash,
+        "expected_policy_hash": expected_hash,
+        "sku": req.sku,
+        "product_name": req.product_name,
+        "total_amount": req.total_amount,
+        "merchant_paypal_email": req.merchant_paypal_email,
+        "agent_signature": req.agent_signature,
+        "policy_id": p["policy_id"],
+        "max_budget_usd": p["max_budget_usd"],
+        "remaining_usd": p["remaining_usd"],
+        "allowed_category": p["allowed_category"],
+        "cfo_signature": p["cfo_signature"],
+        "trusted_item": trusted_item,
+        "hitl_override_approved": False,
+        "visited_nodes": [],
+    }
+    graph_res = await run_adk_checkout_graph_workflow(graph_input)
+    visited_nodes = graph_res.get("visited_nodes", [])
+    adk_route = graph_res.get("adk_graph_route", "route_threat_sink")
+    bryntum_col = graph_res.get("bryntum_column", "BLOCKED_THREAT")
+    hitl_quarantined = bool(graph_res.get("hitl_quarantined", False))
+
+    active_node = visited_nodes[-1] if visited_nodes else "adk_node_crypto_gate"
+    state["adk_graph_telemetry"] = {
+        "workflow_name": "ap2_zero_trust_checkout_graph",
+        "graph_name": "ap2_zero_trust_checkout_graph",
+        "last_mandate_id": req.mandate_id,
+        "active_node": active_node,
+        "active_route": adk_route,
+        "last_route": adk_route,
+        "visited_nodes": visited_nodes,
+        "bryntum_column": bryntum_col,
+        "updated_at": now_str(),
+    }
+
+    # 2. Si el Grafo ADK enrutó a Cuarentena HITL (`QUARANTINED`) o Amenaza Bloqueada (`BLOCKED_THREAT`)
+    if not graph_res.get("authorized"):
+        reason = graph_res.get("error", "SHIELD_REJECTED")
+        shortfall = graph_res.get("shortfall_usd", 0.0)
+        c3_price = float(trusted_item["price"]) if trusted_item and "price" in trusted_item else float(req.total_amount)
+        gate_code = "BUDGET_EXCEEDED" if hitl_quarantined else str(graph_res.get("threat_category", "THREAT_BLOCKED"))
+        badge_label = (
+            f"⏳ HITL: Drag to Settle (+${shortfall:.2f})"
+            if hitl_quarantined
+            else f"🛑 {gate_code}"
+        )
+        card_obj = {
+            "id": req.mandate_id,
+            "mandate_id": req.mandate_id,
+            "name": req.product_name,
+            "sku": req.sku,
+            "amount": req.total_amount,
+            "amount_usd": req.total_amount,
+            "c3_price_usd": c3_price,
+            "shortfall_usd": shortfall,
+            "merchant": req.merchant_paypal_email,
+            "status": bryntum_col,
+            "prio": "high",
+            "adk_node": active_node,
+            "adk_route": adk_route,
+            "adk_nodes": visited_nodes,
+            "gate_code": gate_code,
+            "ed25519_sig": (req.agent_signature or "")[:18] + "...",
+            "badge": badge_label,
+            "details": reason,
+            "description": reason,
+            "timestamp": now_str(),
+            "updated_at": now_str(),
+            "hitl_quarantined": hitl_quarantined,
+            "can_approve_hitl": hitl_quarantined,
+        }
+        _upsert_taskboard_card(card_obj)
+        audit_status = "QUARANTINED_HITL" if hitl_quarantined else "BLOCKED_BY_SHIELD"
+        state["audit_log"].insert(0, {
+            "timestamp": now_str(),
+            "mandate_id": req.mandate_id,
+            "item": req.product_name,
+            "amount": req.total_amount,
+            "status": audit_status,
+            "details": f"{reason} | ADK Graph: {' → '.join(visited_nodes)}",
+        })
+        await broadcast_state()
+        return {
+            "authorized": False,
+            "status": audit_status,
+            "code": gate_code,
+            "error": reason,
+            "adk_node": active_node,
+            "adk_graph_route": adk_route,
+            "adk_graph_nodes": visited_nodes,
+            "bryntum_column": bryntum_col,
+            "hitl_quarantined": hitl_quarantined,
+            "taskboard_card": card_obj,
+            "remaining_usd": p["remaining_usd"],
+        }
+
+    # 3. Liquidar en PayPal Sandbox vía Render Workflows / APIMatic SDK
+    pp_settlement, workflow_engine_note, err_reason = await _settle_mandate_on_paypal(
+        mandate_id=req.mandate_id,
+        agent_id=req.agent_id,
+        expected_hash=expected_hash,
+        sku=req.sku,
+        product_name=req.product_name,
+        total_amount=req.total_amount,
+        merchant_paypal_email=req.merchant_paypal_email,
+        agent_signature=req.agent_signature,
+    )
+    if err_reason or pp_settlement is None:
+        state["audit_log"].insert(0, {
+            "timestamp": now_str(),
+            "mandate_id": req.mandate_id,
+            "item": req.product_name,
+            "amount": req.total_amount,
+            "status": "BLOCKED_BY_SHIELD",
+            "details": err_reason or "PAYPAL_SETTLEMENT_FAILED",
+        })
+        await broadcast_state()
+        return {"authorized": False, "error": err_reason, "remaining_usd": p["remaining_usd"]}
+
+    p["remaining_usd"] = round(p["remaining_usd"] - req.total_amount, 2)
     pp_tx_id = pp_settlement["paypal_order_id"]
     pp_mode = pp_settlement["mode"]
+    c3_price = float(trusted_item["price"]) if trusted_item and "price" in trusted_item else float(req.total_amount)
+
+    settled_card = {
+        "id": req.mandate_id,
+        "mandate_id": req.mandate_id,
+        "name": req.product_name,
+        "sku": req.sku,
+        "amount": req.total_amount,
+        "amount_usd": req.total_amount,
+        "c3_price_usd": c3_price,
+        "merchant": req.merchant_paypal_email,
+        "status": "PAYPAL_SETTLED",
+        "prio": "medium",
+        "adk_node": "adk_node_paypal_settlement",
+        "adk_route": adk_route,
+        "adk_nodes": visited_nodes,
+        "gate_code": "ALL_5_GATES_PASSED",
+        "ed25519_sig": (req.agent_signature or "")[:18] + "...",
+        "paypal_tx_id": pp_tx_id,
+        "paypal_order_id": pp_tx_id,
+        "badge": f"✅ PayPal: {pp_tx_id}",
+        "details": f"Liquidado en PayPal ({pp_mode}) | AP2 Proof: {expected_hash[:12]}...",
+        "description": f"Liquidado en PayPal ({pp_mode}) | AP2 Proof: {expected_hash[:12]}...",
+        "timestamp": now_str(),
+        "updated_at": now_str(),
+        "hitl_quarantined": False,
+        "can_approve_hitl": False,
+    }
+    _upsert_taskboard_card(settled_card)
 
     state["audit_log"].insert(0, {
         "timestamp": now_str(),
@@ -466,7 +721,7 @@ async def process_ap2_checkout(req: CheckoutRequest):
         "item": req.product_name,
         "amount": req.total_amount,
         "status": "PAYPAL_COMPLETED",
-        "details": f"PayPal Order: {pp_tx_id} | Ed25519 Verified | {workflow_engine_note} | {pp_mode}"
+        "details": f"PayPal Order: {pp_tx_id} | Ed25519 Verified | ADK Graph: {' → '.join(visited_nodes)} | {workflow_engine_note} | {pp_mode}",
     })
     await broadcast_state()
     return {
@@ -474,8 +729,212 @@ async def process_ap2_checkout(req: CheckoutRequest):
         "paypal_tx_id": pp_tx_id,
         "paypal_mode": pp_mode,
         "workflow_engine": workflow_engine_note,
+        "adk_graph_route": adk_route,
+        "adk_graph_nodes": visited_nodes,
+        "bryntum_column": "PAYPAL_SETTLED",
         "remaining_usd": p["remaining_usd"],
-        "ap2_proof": expected_hash
+        "ap2_proof": expected_hash,
+    }
+
+
+@app.post("/api/quarantine/resolve")
+async def resolve_quarantined_mandate(req: QuarantineResolveRequest):
+    """
+    Endpoint invocado al arrastrar una tarjeta en Bryntum TaskBoard (Drag & Drop HITL)
+    o mediante la herramienta `resolve_quarantined_mandate_hitl` del agente ADK.
+    """
+    lookup_id = (req.mandate_id or req.card_id).strip()
+    target_card = None
+    for c in state["taskboard_cards"]:
+        if c.get("id") == lookup_id or c.get("mandate_id") == lookup_id:
+            target_card = c
+            break
+
+    if not target_card:
+        return {"status": "ERROR", "reason": f"No se encontró la tarjeta '{lookup_id}' en Bryntum TaskBoard.", "error": f"No se encontró la tarjeta '{lookup_id}' en Bryntum TaskBoard."}
+
+    if target_card.get("status") == "BLOCKED_THREAT" and not target_card.get("hitl_quarantined"):
+        return {
+            "status": "FORBIDDEN_ZERO_TRUST",
+            "reason": "Zero-Trust Policy: Los ataques criptográficos (MitM) o alucinaciones de precios no pueden aprobarse.",
+            "error": "Zero-Trust Policy: Los ataques criptográficos (MitM) o alucinaciones de precios no pueden aprobarse.",
+        }
+
+    p = state["policies"]["procurement-01"]
+    target_col = req.target_column.strip().upper()
+
+    # Caso A: CFO arrastra la tarjeta a 'BLOCKED_THREAT' (Rechazar compra en cuarentena)
+    if target_col == "BLOCKED_THREAT":
+        target_card["status"] = "BLOCKED_THREAT"
+        target_card["hitl_quarantined"] = False
+        target_card["can_approve_hitl"] = False
+        target_card["adk_node"] = "adk_node_threat_sink"
+        target_card["adk_route"] = "route_cfo_rejected_hitl"
+        target_card["adk_nodes"] = list(target_card.get("adk_nodes", [])) + ["adk_node_threat_sink"]
+        target_card["gate_code"] = "CFO_REJECTED_HITL"
+        target_card["badge"] = "🛑 CFO Rejected (HITL)"
+        target_card["details"] = "Rechazado manualmente por el CFO en Bryntum TaskBoard."
+        target_card["description"] = "Rechazado manualmente por el CFO en Bryntum TaskBoard."
+        target_card["timestamp"] = now_str()
+        target_card["updated_at"] = now_str()
+
+        state["adk_graph_telemetry"] = {
+            "workflow_name": "ap2_zero_trust_checkout_graph",
+            "graph_name": "ap2_zero_trust_checkout_graph",
+            "last_mandate_id": target_card["mandate_id"],
+            "active_node": "adk_node_threat_sink",
+            "active_route": "route_cfo_rejected_hitl",
+            "last_route": "route_cfo_rejected_hitl",
+            "visited_nodes": target_card["adk_nodes"],
+            "bryntum_column": "BLOCKED_THREAT",
+            "updated_at": now_str(),
+        }
+        state["audit_log"].insert(0, {
+            "timestamp": now_str(),
+            "mandate_id": target_card["mandate_id"],
+            "item": f"{target_card['name']} (Bryntum HITL Reject)",
+            "amount": target_card["amount"],
+            "status": "BLOCKED_BY_SHIELD",
+            "details": "CFO rechazó el mandato en cuarentena desde Bryntum TaskBoard.",
+        })
+        await broadcast_state()
+        return {"status": "OK", "action": "REJECTED_BY_CFO", "card": target_card}
+
+    # Caso B: CFO arrastra la tarjeta de 'QUARANTINED' a 'PAYPAL_SETTLED' (Auto-Re-Sign Ed25519 + Resume ADK Graph + Settle PayPal)
+    amount = float(target_card["amount"])
+    sku = target_card["sku"]
+    product_name = target_card["name"]
+    merchant_email = target_card["merchant"]
+
+    # Asegurar que el SKU esté en TRUSTED_CATALOG por si es la tarjeta demo inicial
+    if sku not in TRUSTED_CATALOG:
+        TRUSTED_CATALOG[sku] = {"price": amount, "paypal_email": merchant_email}
+
+    # 1. Ampliar el presupuesto en AG Grid para cubrir la orden y re-firmar con la llave privada Ed25519 del CFO
+    shortfall = max(0.0, round(amount - p["remaining_usd"], 2))
+    new_max_budget = round(p["max_budget_usd"] + shortfall + 50.0, 2) if shortfall > 0 else p["max_budget_usd"]
+    new_remaining_before_charge = round(p["remaining_usd"] + shortfall + 50.0, 2) if shortfall > 0 else p["remaining_usd"]
+    new_pol_id = f"pol_hitl_{uuid.uuid4().hex[:5]}"
+    new_cfo_sig = sign_cfo_policy(new_pol_id, p["agent_id"], new_max_budget, p["allowed_category"])
+
+    p["policy_id"] = new_pol_id
+    p["max_budget_usd"] = new_max_budget
+    p["remaining_usd"] = new_remaining_before_charge
+    p["cfo_signature"] = new_cfo_sig
+    new_policy_hash = enrich_policy_hash(p)
+
+    state["audit_log"].insert(0, {
+        "timestamp": now_str(),
+        "mandate_id": new_pol_id,
+        "item": "CFO HITL Override (Bryntum TaskBoard)",
+        "amount": new_max_budget,
+        "status": "POLICY_SIGNED",
+        "details": f"Bryntum Drag-to-Approve | Ed25519 CFO Sig: {new_cfo_sig[:16]}... | New AP2 Hash: {new_policy_hash[:14]}...",
+    })
+
+    # 2. Re-firmar el mandato de checkout con el nuevo Policy Hash y reanudar el Grafo ADK 2.0
+    resumed_agent_sig = sign_agent_checkout(
+        mandate_id=target_card["mandate_id"],
+        agent_id=p["agent_id"],
+        parent_policy_hash=new_policy_hash,
+        sku=sku,
+        total_amount=amount,
+        merchant_paypal_email=merchant_email,
+    )
+
+    graph_res = await run_adk_checkout_graph_workflow({
+        "mandate_id": target_card["mandate_id"],
+        "agent_id": p["agent_id"],
+        "parent_policy_hash": new_policy_hash,
+        "expected_policy_hash": new_policy_hash,
+        "sku": sku,
+        "product_name": product_name,
+        "total_amount": amount,
+        "merchant_paypal_email": merchant_email,
+        "agent_signature": resumed_agent_sig,
+        "policy_id": p["policy_id"],
+        "max_budget_usd": p["max_budget_usd"],
+        "remaining_usd": p["remaining_usd"],
+        "allowed_category": p["allowed_category"],
+        "cfo_signature": p["cfo_signature"],
+        "trusted_item": TRUSTED_CATALOG.get(sku),
+        "hitl_override_approved": True,
+        "visited_nodes": ["adk_node_cfo_hitl_quarantine (RESUMED)"],
+    })
+
+    visited_nodes = graph_res.get("visited_nodes", [])
+    if not graph_res.get("authorized"):
+        await broadcast_state()
+        return {"status": "ERROR", "error": graph_res.get("error", "ADK_GRAPH_REJECTED")}
+
+    # 3. Liquidar en PayPal Sandbox vía Render Workflows / APIMatic SDK
+    pp_settlement, workflow_engine_note, err_reason = await _settle_mandate_on_paypal(
+        mandate_id=target_card["mandate_id"],
+        agent_id=p["agent_id"],
+        expected_hash=new_policy_hash,
+        sku=sku,
+        product_name=product_name,
+        total_amount=amount,
+        merchant_paypal_email=merchant_email,
+        agent_signature=resumed_agent_sig,
+    )
+    if err_reason or pp_settlement is None:
+        await broadcast_state()
+        return {"status": "ERROR", "error": err_reason or "PAYPAL_SETTLEMENT_ERROR"}
+
+    p["remaining_usd"] = round(p["remaining_usd"] - amount, 2)
+    pp_tx_id = pp_settlement["paypal_order_id"]
+    pp_mode = pp_settlement["mode"]
+
+    target_card["status"] = "PAYPAL_SETTLED"
+    target_card["hitl_quarantined"] = False
+    target_card["can_approve_hitl"] = False
+    target_card["adk_node"] = "adk_node_paypal_settlement"
+    target_card["adk_route"] = "route_paypal_settlement (HITL_RESUMED)"
+    target_card["adk_nodes"] = visited_nodes
+    target_card["gate_code"] = "CFO_HITL_APPROVED"
+    target_card["ed25519_sig"] = resumed_agent_sig[:18] + "..."
+    target_card["paypal_tx_id"] = pp_tx_id
+    target_card["paypal_order_id"] = pp_tx_id
+    target_card["badge"] = f"✅ HITL Settled: {pp_tx_id}"
+    target_card["details"] = f"Aprobado en Bryntum y liquidado en PayPal ({pp_mode}) | AP2: {new_policy_hash[:12]}..."
+    target_card["description"] = f"Aprobado en Bryntum y liquidado en PayPal ({pp_mode}) | AP2: {new_policy_hash[:12]}..."
+    target_card["timestamp"] = now_str()
+    target_card["updated_at"] = now_str()
+
+    state["adk_graph_telemetry"] = {
+        "workflow_name": "ap2_zero_trust_checkout_graph",
+        "graph_name": "ap2_zero_trust_checkout_graph",
+        "last_mandate_id": target_card["mandate_id"],
+        "active_node": "adk_node_paypal_settlement",
+        "active_route": "route_paypal_settlement (HITL_RESUMED)",
+        "last_route": "route_paypal_settlement (HITL_RESUMED)",
+        "visited_nodes": visited_nodes,
+        "bryntum_column": "PAYPAL_SETTLED",
+        "updated_at": now_str(),
+    }
+
+    state["audit_log"].insert(0, {
+        "timestamp": now_str(),
+        "mandate_id": target_card["mandate_id"],
+        "item": f"{product_name} (HITL Resumed)",
+        "amount": amount,
+        "status": "PAYPAL_COMPLETED",
+        "details": f"PayPal Order: {pp_tx_id} | Bryntum HITL Drag-to-Settle | ADK Graph: {' → '.join(visited_nodes)} | {pp_mode}",
+    })
+    await broadcast_state()
+    return {
+        "status": "OK",
+        "action": "APPROVED_AND_SETTLED",
+        "card": target_card,
+        "mandate_id": target_card["mandate_id"],
+        "paypal_tx_id": pp_tx_id,
+        "paypal_order_id": pp_tx_id,
+        "paypal_mode": pp_mode,
+        "new_max_budget_usd": p["max_budget_usd"],
+        "remaining_usd": p["remaining_usd"],
+        "adk_graph_nodes": visited_nodes,
+        "adk_visited_nodes": visited_nodes,
     }
 
 

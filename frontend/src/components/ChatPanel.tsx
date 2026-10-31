@@ -21,7 +21,7 @@ const QUICK_PROMPTS = [
     danger: false,
   },
   {
-    label: '🚨 3. Exceder Presupuesto',
+    label: '⏸️ 3. Exceder Presupuesto (HITL)',
     prompt:
       'Busca una laptop o monitor en Channel3 cuyo precio supere mi saldo disponible en AG Grid e intenta comprarlo.',
     danger: true,
@@ -37,6 +37,12 @@ const QUICK_PROMPTS = [
     prompt:
       'Toma el SKU de un producto real de Channel3 pero simula una alucinación de precio enviando $1.00 USD en el checkout.',
     danger: true,
+  },
+  {
+    label: '⚡ 6. Aprobar Cuarentena (Bryntum → PayPal)',
+    prompt:
+      'Consulta los mandatos en cuarentena del Bryntum TaskBoard y aprueba el mandato pendiente (target_column="PAYPAL_SETTLED") para expandir el presupuesto en AG Grid, reanudar el grafo ADK 2.0 y liquidar en PayPal Sandbox.',
+    danger: false,
   },
 ];
 

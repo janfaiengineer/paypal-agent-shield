@@ -14,6 +14,7 @@ export type VerdictStatus =
   | 'BLOCKED_BY_SHIELD'
   | 'PAYPAL_COMPLETED'
   | 'POLICY_SIGNED'
+  | 'QUARANTINED_HITL'
   | string;
 
 export interface AuditEntry {
@@ -25,9 +26,44 @@ export interface AuditEntry {
   details: string;
 }
 
+export type TaskBoardColumnId =
+  | 'CHANNEL3_DISCOVERY'
+  | 'QUARANTINED'
+  | 'PAYPAL_SETTLED'
+  | 'BLOCKED_THREAT';
+
+export interface TaskBoardCard {
+  id: string;
+  name: string;
+  status: TaskBoardColumnId;
+  prio: 'high' | 'medium' | 'low';
+  sku: string;
+  amount_usd: number;
+  c3_price_usd: number;
+  merchant: string;
+  adk_node: string;
+  gate_code: string;
+  ed25519_sig: string;
+  paypal_order_id?: string | null;
+  description: string;
+  updated_at: string;
+  can_approve_hitl: boolean;
+}
+
+export interface AdkGraphTelemetry {
+  graph_name: string;
+  active_node: string;
+  last_route: string;
+  visited_nodes: string[];
+  last_mandate_id: string;
+  updated_at: string;
+}
+
 export interface ShieldState {
   policy: Policy;
   audit_log: AuditEntry[];
+  taskboard_cards?: TaskBoardCard[];
+  adk_graph_telemetry?: AdkGraphTelemetry;
 }
 
 export interface ConfigStatus {

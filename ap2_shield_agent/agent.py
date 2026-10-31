@@ -1,10 +1,19 @@
+import json
 import os
 import sys
 from pathlib import Path
+from typing import Any
 import uuid
 import httpx
 from dotenv import load_dotenv
+from pydantic import BaseModel
 from google.adk.agents import Agent
+from google.adk.agents.context import Context
+from google.adk.events.event import Event
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
+from google.adk.workflow import Workflow, node
+from google.genai import types
 
 load_dotenv()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
@@ -13,7 +22,11 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from ap2_crypto import sign_agent_checkout
+from ap2_crypto import (
+    sign_agent_checkout,
+    verify_cfo_policy,
+    verify_agent_checkout,
+)
 
 def _detect_cli_port() -> str:
     """Detecta el puerto pasado por CLI a uvicorn (--port XXXX) si existe."""
@@ -145,11 +158,15 @@ async def execute_ap2_checkout(
 
     if not result.get("authorized"):
         return {
-            "status": "SHIELD_BLOCKED",
+            "status": result.get("status", "SHIELD_BLOCKED"),
             "mandate_id": mandate_id,
             "ed25519_signature_sent": real_signature[:24] + "...",
             "shield_error": result.get("error"),
-            "ag_grid_remaining_usd": result.get("remaining_usd")
+            "adk_graph_route": result.get("adk_graph_route", "route_threat_sink"),
+            "adk_graph_visited_nodes": result.get("adk_graph_nodes", []),
+            "bryntum_taskboard_column": result.get("bryntum_column", "BLOCKED_THREAT"),
+            "hitl_quarantined": result.get("hitl_quarantined", False),
+            "ag_grid_remaining_usd": result.get("remaining_usd"),
         }
 
     return {
@@ -159,30 +176,342 @@ async def execute_ap2_checkout(
         "paypal_transaction_id": result.get("paypal_tx_id"),
         "paypal_mode": result.get("paypal_mode"),
         "render_workflow_engine": result.get("workflow_engine", "LOCAL_INLINE"),
+        "adk_graph_route": result.get("adk_graph_route", "route_paypal_settlement"),
+        "adk_graph_visited_nodes": result.get("adk_graph_nodes", []),
+        "bryntum_taskboard_column": result.get("bryntum_column", "PAYPAL_SETTLED"),
         "ap2_cryptographic_proof": result.get("ap2_proof")[:20] + "...",
-        "ag_grid_remaining_usd": result.get("remaining_usd")
+        "ag_grid_remaining_usd": result.get("remaining_usd"),
     }
+
+
+async def get_bryntum_taskboard_and_graph_state() -> dict:
+    """
+    Consulta el estado en vivo del Bryntum TaskBoard (tarjetas en cuarentena HITL, órdenes liquidadas
+    y amenazas bloqueadas) junto con la telemetría del grafo de Google ADK 2.0 Workflow.
+    """
+    res = await _shield_request("GET", "/api/state", timeout=10.0)
+    res.raise_for_status()
+    data = res.json()
+    return {
+        "adk_graph_telemetry": data.get("adk_graph_telemetry", {}),
+        "taskboard_cards": data.get("taskboard_cards", []),
+        "policy": data.get("policy", {}),
+    }
+
+
+async def resolve_quarantined_mandate_hitl(
+    mandate_id: str,
+    target_column: str = "PAYPAL_SETTLED",
+) -> dict:
+    """
+    Reanuda un mandato en cuarentena HITL (Human-in-the-Loop) en el Bryntum TaskBoard y el grafo ADK 2.0.
+    Si target_column es 'PAYPAL_SETTLED', re-firma la política Ed25519 del CFO ampliando el presupuesto
+    y liquida la orden en PayPal Sandbox. Si es 'BLOCKED_THREAT', rechaza definitivamente el mandato.
+
+    Args:
+        mandate_id: ID del mandato en cuarentena (ej. 'ap2_chk_...').
+        target_column: Columna destino en Bryntum TaskBoard ('PAYPAL_SETTLED' o 'BLOCKED_THREAT').
+    """
+    res = await _shield_request(
+        "POST",
+        "/api/quarantine/resolve",
+        timeout=35.0,
+        json={"mandate_id": mandate_id, "target_column": target_column},
+    )
+    res.raise_for_status()
+    return res.json()
+
+
+# ============================================================================
+# GOOGLE ADK 2.0 GRAPH WORKFLOW ENGINE (DETERMINISTIC 5-GATE + HITL ROUTING)
+# ============================================================================
+
+class AP2GraphContextPayload(BaseModel):
+    mandate_id: str
+    agent_id: str
+    parent_policy_hash: str
+    expected_policy_hash: str
+    sku: str
+    product_name: str
+    total_amount: float
+    merchant_paypal_email: str
+    agent_signature: str
+    policy_id: str
+    max_budget_usd: float
+    remaining_usd: float
+    allowed_category: str
+    cfo_signature: str
+    trusted_item: dict[str, Any] | None = None
+    hitl_override_approved: bool = False
+    visited_nodes: list[str] = []
+
+
+@node
+async def adk_node_crypto_gate(ctx: Context, node_input: types.Content) -> Event:
+    """
+    Nodo 1 del Grafo ADK 2.0: Inspecciona Gate 1 (Firma Ed25519 CFO) y Gate 2 (Firma Ed25519 Agente).
+    Enruta ataques Man-in-the-Middle hacia `adk_node_threat_sink`.
+    """
+    raw_text = "".join(p.text or "" for p in node_input.parts) if node_input and node_input.parts else "{}"
+    payload = json.loads(raw_text)
+    visited = list(payload.get("visited_nodes", []))
+    visited.append("adk_node_crypto_gate")
+    payload["visited_nodes"] = visited
+
+    # Gate 1: Verificar firma Ed25519 de la política CFO
+    cfo_ok = verify_cfo_policy(
+        payload["policy_id"],
+        payload["agent_id"],
+        payload["max_budget_usd"],
+        payload["allowed_category"],
+        payload["cfo_signature"],
+    )
+    if not cfo_ok:
+        payload["verdict_status"] = "BLOCKED_BY_SHIELD"
+        payload["bryntum_column"] = "BLOCKED_THREAT"
+        payload["threat_category"] = "CFO_CRYPTO_INVALID"
+        payload["error"] = "CRYPTO_ERROR: Firma Ed25519 del CFO inválida."
+        payload["adk_graph_route"] = "route_threat_sink"
+        return Event(output=payload, route="route_threat_sink", state={"last_node": ctx.node_path})
+
+    # Gate 2: Verificar firma Ed25519 del Agente (Anti-MitM)
+    agent_ok = verify_agent_checkout(
+        mandate_id=payload["mandate_id"],
+        agent_id=payload["agent_id"],
+        parent_policy_hash=payload["parent_policy_hash"],
+        sku=payload["sku"],
+        total_amount=payload["total_amount"],
+        merchant_paypal_email=payload["merchant_paypal_email"],
+        signature_b64=payload["agent_signature"],
+    )
+    if not agent_ok:
+        payload["verdict_status"] = "BLOCKED_BY_SHIELD"
+        payload["bryntum_column"] = "BLOCKED_THREAT"
+        payload["threat_category"] = "MITM_SIGNATURE_TAMPERING"
+        payload["error"] = "ED25519_INVALID_SIGNATURE: Adulteración detectada en tránsito (Firma no coincide con el payload)."
+        payload["adk_graph_route"] = "route_threat_sink"
+        return Event(output=payload, route="route_threat_sink", state={"last_node": ctx.node_path})
+
+    return Event(output=payload, route="route_ground_truth", state={"last_node": ctx.node_path})
+
+
+@node
+async def adk_node_channel3_ground_truth(ctx: Context, node_input: dict[str, Any]) -> Event:
+    """
+    Nodo 2 del Grafo ADK 2.0: Inspecciona Gate 3 (Ground-Truth de SKU y precio contra Channel3).
+    Enruta alucinaciones del LLM hacia `adk_node_threat_sink`.
+    """
+    payload = dict(node_input)
+    visited = list(payload.get("visited_nodes", []))
+    visited.append("adk_node_channel3_ground_truth")
+    payload["visited_nodes"] = visited
+
+    trusted_item = payload.get("trusted_item")
+    sku = payload["sku"]
+    if not trusted_item:
+        payload["verdict_status"] = "BLOCKED_BY_SHIELD"
+        payload["bryntum_column"] = "BLOCKED_THREAT"
+        payload["threat_category"] = "LLM_SKU_HALLUCINATION"
+        payload["error"] = f"HALLUCINATION_BLOCKED: El SKU '{sku}' no existe en Channel3."
+        payload["adk_graph_route"] = "route_threat_sink"
+        return Event(output=payload, route="route_threat_sink", state={"last_node": ctx.node_path})
+
+    if (
+        payload["total_amount"] != trusted_item["price"]
+        or payload["merchant_paypal_email"] != trusted_item["paypal_email"]
+    ):
+        payload["verdict_status"] = "BLOCKED_BY_SHIELD"
+        payload["bryntum_column"] = "BLOCKED_THREAT"
+        payload["threat_category"] = "LLM_PRICE_HALLUCINATION"
+        payload["error"] = (
+            f"GROUND_TRUTH_MISMATCH: El agente envió ${payload['total_amount']:.2f}, "
+            f"pero el precio oficial de {sku} es ${trusted_item['price']:.2f}."
+        )
+        payload["adk_graph_route"] = "route_threat_sink"
+        return Event(output=payload, route="route_threat_sink", state={"last_node": ctx.node_path})
+
+    return Event(output=payload, route="route_policy_and_budget", state={"last_node": ctx.node_path})
+
+
+@node
+async def adk_node_policy_budget_gate(ctx: Context, node_input: dict[str, Any]) -> Event:
+    """
+    Nodo 3 del Grafo ADK 2.0: Inspecciona Gate 4 (Hash AP2) y Gate 5 (Saldo en AG Grid).
+    Si el carrito supera el presupuesto disponible, enruta a `adk_node_cfo_hitl_quarantine`
+    para colocar la tarjeta en cuarentena interactiva en Bryntum TaskBoard.
+    """
+    payload = dict(node_input)
+    visited = list(payload.get("visited_nodes", []))
+    visited.append("adk_node_policy_budget_gate")
+    payload["visited_nodes"] = visited
+
+    if payload["parent_policy_hash"] != payload["expected_policy_hash"]:
+        payload["verdict_status"] = "BLOCKED_BY_SHIELD"
+        payload["bryntum_column"] = "BLOCKED_THREAT"
+        payload["threat_category"] = "AP2_LINEAGE_MISMATCH"
+        payload["error"] = "AP2_HASH_MISMATCH: La política del CFO cambió antes de liquidar."
+        payload["adk_graph_route"] = "route_threat_sink"
+        return Event(output=payload, route="route_threat_sink", state={"last_node": ctx.node_path})
+
+    if payload["total_amount"] > payload["remaining_usd"]:
+        shortfall = round(payload["total_amount"] - payload["remaining_usd"], 2)
+        payload["shortfall_usd"] = shortfall
+        payload["verdict_status"] = "BLOCKED_BY_SHIELD"
+        payload["bryntum_column"] = "QUARANTINED"
+        payload["threat_category"] = "CFO_HITL_BUDGET_QUARANTINE"
+        payload["error"] = (
+            f"BUDGET_EXCEEDED: Carrito ${payload['total_amount']:.2f} USD > "
+            f"Disponible en AG Grid ${payload['remaining_usd']:.2f} USD "
+            f"(En cuarentena HITL en Bryntum TaskBoard — Déficit: +${shortfall:.2f} USD)"
+        )
+        payload["adk_graph_route"] = "route_cfo_hitl_quarantine"
+        return Event(output=payload, route="route_cfo_hitl_quarantine", state={"last_node": ctx.node_path})
+
+    payload["adk_graph_route"] = "route_paypal_settlement"
+    return Event(output=payload, route="route_paypal_settlement", state={"last_node": ctx.node_path})
+
+
+@node
+async def adk_node_cfo_hitl_quarantine(ctx: Context, node_input: dict[str, Any]) -> Event:
+    """
+    Nodo 4A (HITL Quarantine): Pausa el mandato de compra en la columna `QUARANTINED`
+    del Bryntum TaskBoard esperando que el CFO arrastre la tarjeta para re-firmar y liquidar.
+    """
+    payload = dict(node_input)
+    visited = list(payload.get("visited_nodes", []))
+    visited.append("adk_node_cfo_hitl_quarantine")
+    payload["visited_nodes"] = visited
+    payload["authorized"] = False
+    payload["hitl_quarantined"] = True
+    payload["interrupt_id"] = f"hitl_{payload['mandate_id']}"
+    payload["terminal_node_path"] = ctx.node_path
+    return Event(output=payload, state={"quarantined_mandate": payload["mandate_id"]})
+
+
+@node
+async def adk_node_threat_sink(ctx: Context, node_input: dict[str, Any]) -> Event:
+    """
+    Nodo 4B (Threat Sink): Bloquea permanentemente ataques criptográficos (MitM) o alucinaciones de LLM
+    en la columna `BLOCKED_THREAT` del Bryntum TaskBoard.
+    """
+    payload = dict(node_input)
+    visited = list(payload.get("visited_nodes", []))
+    visited.append("adk_node_threat_sink")
+    payload["visited_nodes"] = visited
+    payload["authorized"] = False
+    payload["hitl_quarantined"] = False
+    payload["terminal_node_path"] = ctx.node_path
+    return Event(output=payload, state={"blocked_mandate": payload["mandate_id"]})
+
+
+@node
+async def adk_node_paypal_settlement(ctx: Context, node_input: dict[str, Any]) -> Event:
+    """
+    Nodo 4C (PayPal Settlement): Autoriza el mandato verificado por las 5 compuertas para
+    su liquidación en PayPal Sandbox (vía Render Workflows / APIMatic SDK) y mueve la tarjeta
+    a `PAYPAL_SETTLED` en el Bryntum TaskBoard.
+    """
+    payload = dict(node_input)
+    visited = list(payload.get("visited_nodes", []))
+    visited.append("adk_node_paypal_settlement")
+    payload["visited_nodes"] = visited
+    payload["authorized"] = True
+    payload["hitl_quarantined"] = False
+    payload["bryntum_column"] = "PAYPAL_SETTLED"
+    payload["terminal_node_path"] = ctx.node_path
+    return Event(output=payload, state={"settled_mandate": payload["mandate_id"]})
+
+
+ap2_checkout_graph = Workflow(
+    name="ap2_zero_trust_checkout_graph",
+    description=(
+        "Grafo determinista de Google ADK 2.0 que conecta la inspección criptográfica de 5 compuertas "
+        "con el tablero interactivo Bryntum TaskBoard (HITL Quarantine, Threat Sink y PayPal Settlement)."
+    ),
+    edges=[
+        ("START", adk_node_crypto_gate),
+        (
+            adk_node_crypto_gate,
+            {
+                "route_ground_truth": adk_node_channel3_ground_truth,
+                "route_threat_sink": adk_node_threat_sink,
+            },
+        ),
+        (
+            adk_node_channel3_ground_truth,
+            {
+                "route_policy_and_budget": adk_node_policy_budget_gate,
+                "route_threat_sink": adk_node_threat_sink,
+            },
+        ),
+        (
+            adk_node_policy_budget_gate,
+            {
+                "route_paypal_settlement": adk_node_paypal_settlement,
+                "route_cfo_hitl_quarantine": adk_node_cfo_hitl_quarantine,
+                "route_threat_sink": adk_node_threat_sink,
+            },
+        ),
+    ],
+)
+
+_graph_session_service = InMemorySessionService()
+_graph_runner = Runner(
+    agent=ap2_checkout_graph,
+    app_name="ap2_shield_graph_engine",
+    session_service=_graph_session_service,
+)
+
+
+async def run_adk_checkout_graph_workflow(graph_input: dict[str, Any]) -> dict[str, Any]:
+    """
+    Ejecuta el grafo `ap2_checkout_graph` de Google ADK 2.0 y devuelve el veredicto estructurado,
+    la ruta condicional tomada y la traza exacta de nodos recorridos.
+    """
+    session_id = f"wf_{graph_input.get('mandate_id', uuid.uuid4().hex[:8])}_{uuid.uuid4().hex[:4]}"
+    await _graph_session_service.create_session(
+        app_name="ap2_shield_graph_engine",
+        user_id="shield_firewall",
+        session_id=session_id,
+    )
+    msg = types.Content(
+        role="user",
+        parts=[types.Part.from_text(text=json.dumps(graph_input))],
+    )
+    final_output: dict[str, Any] = {}
+    async for ev in _graph_runner.run_async(
+        user_id="shield_firewall",
+        session_id=session_id,
+        new_message=msg,
+    ):
+        out = getattr(ev, "output", None)
+        if isinstance(out, dict):
+            final_output = out
+    return final_output
 
 
 root_agent = Agent(
     name="paypal_ap2_procurement_agent",
     model=GEMINI_MODEL,
-    description="Agente de compras autónomo gobernado por criptografía Ed25519 (AP2), AG Grid y PayPal Agent Shield.",
+    description="Agente de compras autónomo gobernado por Google ADK 2.0 Graph Workflows, criptografía Ed25519 (AP2), AG Grid, Bryntum TaskBoard y PayPal Agent Shield.",
     instruction="""
-    Eres el Agente de Compras Autónomo corporativo operando con Google ADK, el protocolo criptográfico AP2 (Ed25519) y PayPal Agent Shield.
+    Eres el Agente de Compras Autónomo corporativo operando con Google ADK 2.0 (Graph Workflows + Agent), el protocolo criptográfico AP2 (Ed25519), AG Grid, Bryntum TaskBoard y PayPal Agent Shield.
     Responde de forma concisa, ejecutiva y bien estructurada.
 
     FLUJO DE TRABAJO:
-    1. Si te piden ver el presupuesto o catálogo, usa `get_ag_grid_policy_state` o `search_catalog_channel3`.
+    1. Si te piden ver el presupuesto, el catálogo o el estado del Bryntum TaskBoard / Grafo ADK, usa `get_ag_grid_policy_state`, `search_catalog_channel3` o `get_bryntum_taskboard_and_graph_state`.
     2. PROHIBIDO INVENTAR PRODUCTOS O SKUs: Muestra únicamente los productos devueltos por `search_catalog_channel3` incluyendo siempre su `sku`, `price` y `paypal_email` exactos. Si `search_catalog_channel3` devuelve una lista vacía o un error, infórmalo claramente al usuario y NO inventes productos por tu cuenta.
     3. Cuando te pidan comprar un producto, usa exactamente el `sku`, `name`, `price` y `paypal_email` que devolvió `search_catalog_channel3` (vuelve a llamar a `search_catalog_channel3` si no tienes esos datos exactos en la conversación) y ejecuta `execute_ap2_checkout`.
     4. Si el usuario pide explícitamente simular un ataque criptográfico, adulteración o firma inválida, pasa `simulate_tampering=True` a `execute_ap2_checkout`.
     5. Si el usuario pide explícitamente simular una alucinación de precio o SKU (o cambiar el precio manualmente a otro valor), pasa ese valor alterado con `simulate_tampering=False` para demostrar cómo la validación Ground-Truth del Shield lo detiene.
-    6. Resume siempre: ID del mandato AP2, estado de la firma Ed25519, veredicto del Shield / ID de PayPal y saldo restante en AG Grid.
+    6. Si una compra excede el presupuesto (`hitl_quarantined=True`), explica que el grafo de ADK (`ap2_zero_trust_checkout_graph`) pausó la orden en el nodo `adk_node_cfo_hitl_quarantine` y colocó la tarjeta en la columna `⏳ CFO Quarantine (HITL)` del **Bryntum TaskBoard**, donde el CFO puede arrastrarla a `💳 PayPal Sandbox Settled` para auto-firmar el presupuesto Ed25519 y liquidarla en PayPal (o pedirte aprobarla con `resolve_quarantined_mandate_hitl`).
+    7. Resume siempre: ID del mandato AP2, nodos recorridos en el Grafo ADK (`adk_graph_visited_nodes`), columna en Bryntum TaskBoard (`bryntum_taskboard_column`), veredicto del Shield / ID de PayPal y saldo restante en AG Grid.
     """,
     tools=[
         search_catalog_channel3,
         get_ag_grid_policy_state,
-        execute_ap2_checkout
+        execute_ap2_checkout,
+        get_bryntum_taskboard_and_graph_state,
+        resolve_quarantined_mandate_hitl,
     ]
 )

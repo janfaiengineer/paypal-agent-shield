@@ -24,10 +24,20 @@ export const Topbar: React.FC<TopbarProps> = ({ credsStatus, onOpenConfig }) => 
     <div className="topbar">
       <div className="brand">
         <span>🛡️ PayPal Agent Shield</span>
-        <span className="tag">Google ADK</span>
+        <span className="tag">Google ADK 2.0 Graph</span>
         <span className="tag">AP2 Ed25519</span>
         <span className="tag">PayPal APIMatic SDK</span>
         <span className="tag">Render Workflows</span>
+        <span
+          className="tag"
+          style={{
+            background: 'rgba(168, 85, 247, 0.18)',
+            color: '#d8b4fe',
+            borderColor: 'rgba(168, 85, 247, 0.5)',
+          }}
+        >
+          Bryntum TaskBoard HITL
+        </span>
         <span
           className="tag"
           style={{

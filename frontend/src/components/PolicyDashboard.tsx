@@ -17,7 +17,13 @@ import {
   type AgReportState,
   type AgStudioMode,
 } from 'ag-studio';
-import type { Policy, AuditEntry } from '../types/shield';
+import { BryntumTaskBoardView } from './BryntumTaskBoardView';
+import type {
+  Policy,
+  AuditEntry,
+  TaskBoardCard,
+  AdkGraphTelemetry,
+} from '../types/shield';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -179,6 +185,7 @@ function classifyControlLayer(entry: AuditEntry): string {
 
 function classifyDecisionType(status: AuditEntry['status']): string {
   if (status === 'PAYPAL_COMPLETED') return 'Pago Liquidado (PayPal)';
+  if (status === 'QUARANTINED_HITL') return 'Cuarentena HITL (Bryntum TaskBoard)';
   if (status === 'BLOCKED_BY_SHIELD') return 'Capital Protegido (Bloqueado)';
   return 'Gobernanza / Firma de Política';
 }
@@ -186,12 +193,17 @@ function classifyDecisionType(status: AuditEntry['status']): string {
 interface PolicyDashboardProps {
   policy: Policy | null;
   auditLog: AuditEntry[];
+  taskboardCards: TaskBoardCard[];
+  adkGraphTelemetry: AdkGraphTelemetry | null;
 }
 
 const StatusCellRenderer: React.FC<ICellRendererParams<AuditEntry>> = (params) => {
   const val = params.value || '';
   if (val === 'BLOCKED_BY_SHIELD') {
     return <span className="status-pill blocked">🛑 {val}</span>;
+  }
+  if (val === 'QUARANTINED_HITL') {
+    return <span className="status-pill quarantined">⏸️ {val}</span>;
   }
   if (val === 'PAYPAL_COMPLETED') {
     return <span className="status-pill approved">✅ {val}</span>;
@@ -202,11 +214,23 @@ const StatusCellRenderer: React.FC<ICellRendererParams<AuditEntry>> = (params) =
   return <span>{val}</span>;
 };
 
-export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({ policy, auditLog }) => {
-  const [activeView, setActiveView] = useState<'control-plane' | 'ag-studio'>('control-plane');
+export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({
+  policy,
+  auditLog,
+  taskboardCards,
+  adkGraphTelemetry,
+}) => {
+  const [activeView, setActiveView] = useState<
+    'control-plane' | 'bryntum-hitl' | 'ag-studio'
+  >('control-plane');
   const [studioMode, setStudioMode] = useState<AgStudioMode>('edit');
   const [quickFilter, setQuickFilter] = useState<string>('');
   const auditGridRef = useRef<AgGridReact<AuditEntry>>(null);
+
+  const quarantinedCount = useMemo(
+    () => taskboardCards.filter((c) => c.status === 'QUARANTINED').length,
+    [taskboardCards]
+  );
 
   const policyRows = useMemo(() => (policy ? [policy] : []), [policy]);
 
@@ -226,7 +250,10 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({ policy, auditL
       if (entry.status === 'PAYPAL_COMPLETED') {
         settledUsd += amt;
         settledCount += 1;
-      } else if (entry.status === 'BLOCKED_BY_SHIELD') {
+      } else if (
+        entry.status === 'BLOCKED_BY_SHIELD' ||
+        entry.status === 'QUARANTINED_HITL'
+      ) {
         blockedUsd += amt;
         blockedCount += 1;
       }
@@ -325,6 +352,7 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({ policy, auditL
   const getAuditRowClass = useCallback((params: RowClassParams<AuditEntry>) => {
     if (!params.data) return '';
     if (params.data.status === 'BLOCKED_BY_SHIELD') return 'row-blocked';
+    if (params.data.status === 'QUARANTINED_HITL') return 'row-quarantined';
     if (params.data.status === 'PAYPAL_COMPLETED') return 'row-approved';
     if (params.data.status === 'POLICY_SIGNED') return 'row-policy';
     return '';
@@ -420,7 +448,7 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({ policy, auditL
         </div>
       </div>
 
-      {/* Selector de vista: Control Plane (AG Grid) vs CFO Analytics Studio (AG Studio 3) */}
+      {/* Selector de vista: Control Plane (AG Grid) vs Bryntum HITL TaskBoard & ADK 2.0 Graph vs CFO Analytics Studio (AG Studio 3) */}
       <div className="studio-switcher-bar">
         <div className="studio-tabs">
           <button
@@ -429,6 +457,18 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({ policy, auditL
             onClick={() => setActiveView('control-plane')}
           >
             🛡️ Control Plane (AG Grid En Vivo)
+          </button>
+          <button
+            type="button"
+            className={`studio-tab-btn bryntum-highlight ${
+              activeView === 'bryntum-hitl' ? 'active' : ''
+            }`}
+            onClick={() => setActiveView('bryntum-hitl')}
+          >
+            📋 Bryntum HITL TaskBoard &amp; ADK 2.0 Graph
+            {quarantinedCount > 0 && (
+              <span className="quarantine-count-badge">{quarantinedCount} HITL</span>
+            )}
           </button>
           <button
             type="button"
@@ -459,6 +499,12 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({ policy, auditL
               📥 Exportar CSV AP2
             </button>
           </div>
+        ) : activeView === 'bryntum-hitl' ? (
+          <div className="audit-toolbar">
+            <span style={{ fontSize: '11.5px', color: '#a78bfa', fontWeight: 600 }}>
+              🕸️ Nodo ADK Activo: <code>{adkGraphTelemetry?.active_node || 'adk_node_cfo_hitl_quarantine'}</code>
+            </span>
+          </div>
         ) : (
           <div className="audit-toolbar">
             <span style={{ fontSize: '11.5px', color: '#cbd5e1' }}>
@@ -486,6 +532,29 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({ policy, auditL
 
       {activeView === 'control-plane' ? (
         <>
+          <div className="adk-mini-banner">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 700, color: '#c084fc', fontSize: '12px' }}>
+                🕸️ Google ADK 2.0 Graph Workflow:
+              </span>
+              <code style={{ fontSize: '11.5px', color: '#38bdf8' }}>
+                {(adkGraphTelemetry?.visited_nodes || [
+                  'adk_node_crypto_gate',
+                  'adk_node_channel3_ground_truth',
+                  'adk_node_policy_budget_gate',
+                  'adk_node_cfo_hitl_quarantine',
+                ]).join(' → ')}
+              </code>
+            </div>
+            <button
+              type="button"
+              className="btn-open-taskboard"
+              onClick={() => setActiveView('bryntum-hitl')}
+            >
+              📋 Abrir Bryntum HITL TaskBoard ({quarantinedCount} en cuarentena) →
+            </button>
+          </div>
+
           <div>
             <div className="section-header">
               <span>1. Políticas Presupuestarias del CFO (AG Grid Editable)</span>
@@ -547,6 +616,12 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({ policy, auditL
             </div>
           </div>
         </>
+      ) : activeView === 'bryntum-hitl' ? (
+        <BryntumTaskBoardView
+          cards={taskboardCards}
+          telemetry={adkGraphTelemetry}
+          policy={policy}
+        />
       ) : (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <div className="section-header">
