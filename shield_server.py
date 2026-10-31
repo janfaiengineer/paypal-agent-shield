@@ -51,6 +51,10 @@ from ap2_crypto import (
     AGENT_PUBLIC_KEY,
 )
 from ap2_shield_agent.agent import root_agent, run_adk_checkout_graph_workflow
+from ap2_shield_agent.studio_agent import (
+    parse_studio_chart_request,
+    run_studio_adk_turn,
+)
 
 app = FastAPI(title="PayPal Agent Shield — Unified Console")
 paypal_sdk = PayPalAPIMaticProcessor()
@@ -135,7 +139,44 @@ state = {
             "agent_pubkey": get_public_key_hex(AGENT_PUBLIC_KEY)[:16],
         }
     },
-    "audit_log": [],
+    "audit_log": [
+        {
+            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "mandate_id": "SYS-CFG",
+            "item": "CFO Policy pol_aggrid_001 (OFFICE_AND_TECH)",
+            "amount": 200.00,
+            "merchant": "office-supply@sandbox.paypal.com",
+            "status": "POLICY_SIGNED",
+            "details": f"Política Ed25519 firmada por CFO ($200.00 máx) | Sig: {_init_sig[:20]}...",
+        },
+        {
+            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "mandate_id": "ap2_chk_c3_seed",
+            "item": "Ergonomic Mesh Chair (CHAIR-ERG-01)",
+            "amount": 120.00,
+            "merchant": "office-supply@sandbox.paypal.com",
+            "status": "PAYPAL_COMPLETED",
+            "details": f"Ed25519 Verified | Channel3 Ground-Truth ($120.00) | PayPal Order ID: PAYPAL-SANDBOX-88A1 | Sig: {_init_sig[:18]}...",
+        },
+        {
+            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "mandate_id": "ap2_chk_hitl_demo",
+            "item": "Pro Workstation Laptop 16 (LAP-PRO-16)",
+            "amount": 799.00,
+            "merchant": "monitors-direct@sandbox.paypal.com",
+            "status": "QUARANTINED_HITL",
+            "details": "BUDGET_EXCEEDED_HITL: Pausado en nodo ADK adk_node_cfo_hitl_quarantine ($799.00 > $200.00 límite CFO).",
+        },
+        {
+            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "mandate_id": "ap2_chk_mitm_01",
+            "item": "Spoofed GPU Cluster (HALLUCINATED-SKU)",
+            "amount": 950.00,
+            "merchant": "hacker@darkweb.io",
+            "status": "BLOCKED_BY_SHIELD",
+            "details": "GROUND_TRUTH_MISMATCH & ED25519_TAMPERED: Interceptado por Firewall Criptográfico AP2 antes de PayPal Sandbox.",
+        },
+    ],
     "taskboard_cards": [
         {
             "id": "c3_sync_seed",
@@ -1163,448 +1204,29 @@ def _parse_studio_chart_request(
     override_widget_type: str | None = None,
     override_widget_id: str | None = None,
 ) -> dict:
-    lower = (prompt or "").lower()
-    chart_intent_keywords = (
-        "pie",
-        "pastel",
-        "torta",
-        "circular",
-        "donut",
-        "dona",
-        "doughnut",
-        "anillo",
-        "bar",
-        "barra",
-        "barras",
-        "column",
-        "columna",
-        "columnas",
-        "line",
-        "línea",
-        "linea",
-        "area",
-        "área",
-        "funnel",
-        "embudo",
-        "treemap",
-        "sunburst",
-        "radar",
-        "chart",
-        "gráfico",
-        "grafico",
-        "gráfica",
-        "grafica",
-        "add widget",
-        "agrega un",
-        "añade un",
-        "crea un",
-        "haz un",
-        "hacer un",
+    return parse_studio_chart_request(
+        prompt=prompt,
+        existing_add_count=existing_add_count,
+        override_widget_type=override_widget_type,
+        override_widget_id=override_widget_id,
     )
-    is_chart_request = any(k in lower for k in chart_intent_keywords)
-
-    widget_type = override_widget_type or "bar-chart-grouped"
-    if not override_widget_type:
-        if any(k in lower for k in ("donut", "dona", "doughnut", "anillo")):
-            widget_type = "donut-chart"
-        elif any(k in lower for k in ("pie", "pastel", "torta", "circular")):
-            widget_type = "pie-chart"
-        elif any(k in lower for k in ("line", "línea", "linea", "trend", "tendencia")):
-            widget_type = "line-chart"
-        elif any(k in lower for k in ("area", "área")):
-            widget_type = "area-chart"
-        elif any(k in lower for k in ("column", "columna")):
-            widget_type = "column-chart-grouped"
-        elif any(k in lower for k in ("funnel", "embudo")):
-            widget_type = "funnel-chart"
-        elif "treemap" in lower:
-            widget_type = "treemap-chart"
-        elif "sunburst" in lower:
-            widget_type = "sunburst-chart"
-        elif "radar" in lower:
-            widget_type = "radar-area-chart"
-        elif any(k in lower for k in ("stacked", "apilad")):
-            widget_type = "bar-chart-stacked"
-        else:
-            widget_type = "bar-chart-grouped"
-
-    category_field = "audit_ledger.merchant"
-    category_label = "Comercio Destino"
-    if any(k in lower for k in ("riesgo", "risk")):
-        category_field = "audit_ledger.risk_level"
-        category_label = "Nivel de Riesgo"
-    elif any(k in lower for k in ("decisión", "decision", "estado", "status")):
-        category_field = "audit_ledger.policy_decision"
-        category_label = "Decisión de Política"
-    elif any(k in lower for k in ("categoría", "categoria", "category")):
-        category_field = "audit_ledger.category"
-        category_label = "Categoría"
-    elif any(k in lower for k in ("agente", "agent")):
-        category_field = "audit_ledger.agent_id"
-        category_label = "Agente IA"
-    elif any(k in lower for k in ("capa", "layer")):
-        category_field = "audit_ledger.control_layer"
-        category_label = "Capa de Control"
-
-    is_single_series = widget_type in _SINGLE_SERIES_WIDGET_TYPES
-    metric_label = "Pagado vs Bloqueado (USD)"
-    if is_single_series:
-        if any(k in lower for k in ("bloquead", "blocked", "amenaza", "threat")):
-            value_key = [{"id": "audit_ledger.blocked_usd", "aggregation": "sum"}]
-            metric_label = "Capital Bloqueado (USD)"
-        elif any(k in lower for k in ("settled", "liquidad", "pagad", "aprob")):
-            value_key = [{"id": "audit_ledger.settled_usd", "aggregation": "sum"}]
-            metric_label = "Gasto Liquidado PayPal (USD)"
-        elif any(k in lower for k in ("count", "cantidad", "número", "numero", "transacciones")):
-            value_key = [{"id": "audit_ledger.mandate_id", "aggregation": "count"}]
-            metric_label = "Total Transacciones"
-        else:
-            value_key = [{"id": "audit_ledger.amount_usd", "aggregation": "sum"}]
-            metric_label = "Volumen Total (USD)"
-    else:
-        value_key = [
-            {"id": "audit_ledger.settled_usd", "aggregation": "sum"},
-            {"id": "audit_ledger.blocked_usd", "aggregation": "sum"},
-        ]
-
-    short_type = widget_type.split("-chart")[0]
-    widget_id = override_widget_id or (
-        "w-merchant-spend"
-        if widget_type == "bar-chart-grouped" and existing_add_count == 0
-        else f"w-ai-{short_type}-{existing_add_count + 1}"
-    )
-
-    return {
-        "is_chart_request": is_chart_request,
-        "widget_type": widget_type,
-        "widget_id": widget_id,
-        "title": f"Distribución por {category_label}: {metric_label}",
-        "category_key": [{"id": category_field}],
-        "value_key": value_key,
-        "x_track": 0,
-        "y_track": 41 + existing_add_count * 12,
-        "x_span": 24,
-        "y_span": 12,
-    }
 
 
 @app.post("/api/studio/ai/responses")
 async def studio_ai_responses(request: Request):
     """
     Endpoint del AG Studio Agent Framework (`AgLlmAdapter` -> `/api/studio/ai/responses`).
-    Impulsa al agente personalizado `ap2-shield-auditor` y a los agentes integrados de AG Studio
-    (`lead`, `data`, `widget`, `page`, `planning`), ejecutando herramientas nativas de Studio
-    (`execute_query`, `view_schema`, `add_widget`, `delegate_to`, `configure_widget`, `complete_task`)
-    sobre el motor relacional.
+    Delega la ejecución al agente dedicado de Google ADK (`ap2_shield_agent/studio_agent.py`),
+    que opera con `Agent`, `Runner`, `InMemorySessionService` y `AgStudioClientTool(is_long_running=True)`
+    para impulsar tanto al agente `ap2-shield-auditor` como a los sub-agentes especialistas de AG Studio
+    (`lead`, `data`, `widget`, `page`, `planning`) con respaldo determinista automático.
     """
     try:
         body = await request.json()
     except Exception:
         body = {}
 
-    conv_items = body.get("input") or []
-    tools_schema = body.get("tools") or []
-    available_tools = {t.get("name") for t in tools_schema if isinstance(t, dict) and t.get("name")}
-    model_info = body.get("model") or {}
-    model_id = (model_info.get("id") if isinstance(model_info, dict) else None) or "gemini-2.5-flash"
-    turn_id = f"studio_turn_{uuid.uuid4().hex[:8]}"
-
-    # Identificar el último mensaje del usuario y los outputs de herramientas posteriores a él
-    last_user_idx = -1
-    last_user_text = ""
-    for idx, item in enumerate(conv_items):
-        if isinstance(item, dict) and item.get("type") == "message" and item.get("role") == "user":
-            last_user_idx = idx
-            parts = item.get("content") or []
-            texts = [p.get("text", "") for p in parts if isinstance(p, dict) and p.get("type") == "text"]
-            last_user_text = " ".join(texts).strip()
-
-    items_since_user = conv_items[last_user_idx + 1 :] if last_user_idx >= 0 else conv_items
-    tool_outputs_since_user = [
-        item for item in items_since_user if isinstance(item, dict) and item.get("type") == "function_call_output"
-    ]
-    tool_calls_since_user = [
-        item for item in items_since_user if isinstance(item, dict) and item.get("type") == "function_call"
-    ]
-    all_add_widgets = [
-        item
-        for item in conv_items
-        if isinstance(item, dict) and item.get("type") == "function_call" and item.get("name") == "add_widget"
-    ]
-
-    lower_prompt = last_user_text.lower()
-    did_add_widget = any(tc.get("name") == "add_widget" for tc in tool_calls_since_user)
-    did_configure_widget = any(tc.get("name") == "configure_widget" for tc in tool_calls_since_user)
-    did_delegate_to = any(tc.get("name") == "delegate_to" for tc in tool_calls_since_user)
-
-    # Paso 0: Si estamos dentro del sub-agente especialista `widget` (o `configure_widget` está disponible)
-    # y aún no hemos invocado `configure_widget` en este turno, configurar el widget ahora.
-    if (
-        "configure_widget" in available_tools
-        and not did_configure_widget
-        and ("add_widget" not in available_tools or did_add_widget)
-    ):
-        target_widget_id: str | None = None
-        target_widget_type: str | None = None
-
-        for tc in tool_calls_since_user:
-            if tc.get("name") in ("view_widget", "add_widget"):
-                try:
-                    parsed_args = json.loads(tc.get("arguments") or "{}")
-                    if isinstance(parsed_args, dict):
-                        target_widget_id = parsed_args.get("widgetId") or target_widget_id
-                        target_widget_type = parsed_args.get("type") or target_widget_type
-                except Exception:
-                    pass
-
-        for out_item in tool_outputs_since_user:
-            out_str = str(out_item.get("output") or "")
-            if out_str.startswith("Widget "):
-                # Formato de view_widget: "Widget <widgetId>: <widgetType> (<xSpan>x<ySpan>)"
-                parts = out_str.split()
-                if len(parts) >= 3:
-                    target_widget_id = target_widget_id or parts[1].rstrip(":")
-                    target_widget_type = target_widget_type or parts[2]
-
-        spec = _parse_studio_chart_request(
-            last_user_text,
-            existing_add_count=max(0, len(all_add_widgets) - 1),
-            override_widget_type=target_widget_type,
-            override_widget_id=target_widget_id,
-        )
-        return {
-            "id": turn_id,
-            "model": model_id,
-            "toolCalls": [
-                {
-                    "callId": f"call_{uuid.uuid4().hex[:8]}",
-                    "name": "configure_widget",
-                    "arguments": json.dumps(
-                        {
-                            "op": "patch",
-                            "widgetId": spec["widget_id"],
-                            "value": {
-                                "format": {
-                                    "title": {
-                                        "text": spec["title"],
-                                        "enabled": True,
-                                    }
-                                },
-                                "dataMapping": {
-                                    "categoryKey": spec["category_key"],
-                                    "valueKey": spec["value_key"],
-                                },
-                            },
-                        }
-                    ),
-                }
-            ],
-        }
-
-    # Paso 1: Si aún no se ha invocado ninguna herramienta de AG Studio en este turno, ejecutar una herramienta real
-    if len(tool_outputs_since_user) == 0:
-        chart_spec = _parse_studio_chart_request(last_user_text, existing_add_count=len(all_add_widgets))
-        if chart_spec["is_chart_request"]:
-            if "add_widget" in available_tools:
-                return {
-                    "id": turn_id,
-                    "model": model_id,
-                    "toolCalls": [
-                        {
-                            "callId": f"call_{uuid.uuid4().hex[:8]}",
-                            "name": "add_widget",
-                            "arguments": json.dumps(
-                                {
-                                    "widgetId": chart_spec["widget_id"],
-                                    "type": chart_spec["widget_type"],
-                                    "xTrack": chart_spec["x_track"],
-                                    "yTrack": chart_spec["y_track"],
-                                    "xSpan": chart_spec["x_span"],
-                                    "ySpan": chart_spec["y_span"],
-                                }
-                            ),
-                        }
-                    ],
-                }
-            if "view_page" in available_tools:
-                return {
-                    "id": turn_id,
-                    "model": model_id,
-                    "toolCalls": [
-                        {
-                            "callId": f"call_{uuid.uuid4().hex[:8]}",
-                            "name": "view_page",
-                            "arguments": json.dumps({}),
-                        }
-                    ],
-                }
-
-        if "execute_query" in available_tools:
-            is_policy_compare = "policy" in lower_prompt or "limit" in lower_prompt
-            is_channel3_check = "channel3" in lower_prompt or "mandate coverage" in lower_prompt
-
-            if is_policy_compare:
-                dimensions = [
-                    {"field": {"id": "audit_ledger.agent_id"}, "as": "agent_id"},
-                    {"field": {"id": "agent_policies.policy_id"}, "as": "policy_id"},
-                    {"field": {"id": "audit_ledger.policy_decision"}, "as": "policy_decision"},
-                ]
-                measures = [
-                    {"field": {"id": "audit_ledger.settled_usd", "aggregation": "sum"}, "as": "settled_usd"},
-                    {"field": {"id": "audit_ledger.blocked_usd", "aggregation": "sum"}, "as": "blocked_usd"},
-                    {"field": {"id": "agent_policies.max_tx_limit_usd", "aggregation": "avg"}, "as": "max_tx_limit_usd"},
-                    {"field": {"id": "agent_policies.remaining_usd", "aggregation": "avg"}, "as": "remaining_usd"},
-                ]
-            elif is_channel3_check:
-                dimensions = [
-                    {"field": {"id": "audit_ledger.channel3_verified"}, "as": "channel3_verified"},
-                    {"field": {"id": "audit_ledger.ap2_mandate_status"}, "as": "ap2_mandate_status"},
-                    {"field": {"id": "audit_ledger.control_layer"}, "as": "control_layer"},
-                ]
-                measures = [
-                    {"field": {"id": "audit_ledger.settled_usd", "aggregation": "sum"}, "as": "settled_usd"},
-                    {"field": {"id": "audit_ledger.blocked_usd", "aggregation": "sum"}, "as": "blocked_usd"},
-                    {"field": {"id": "audit_ledger.mandate_id", "aggregation": "count"}, "as": "tx_count"},
-                ]
-            else:
-                dimensions = [
-                    {"field": {"id": "audit_ledger.policy_decision"}, "as": "policy_decision"},
-                    {"field": {"id": "audit_ledger.risk_level"}, "as": "risk_level"},
-                    {"field": {"id": "audit_ledger.ap2_mandate_status"}, "as": "ap2_mandate_status"},
-                ]
-                measures = [
-                    {"field": {"id": "audit_ledger.settled_usd", "aggregation": "sum"}, "as": "settled_usd"},
-                    {"field": {"id": "audit_ledger.blocked_usd", "aggregation": "sum"}, "as": "blocked_usd"},
-                    {"field": {"id": "audit_ledger.mandate_id", "aggregation": "count"}, "as": "tx_count"},
-                ]
-
-            return {
-                "id": turn_id,
-                "model": model_id,
-                "toolCalls": [
-                    {
-                        "callId": f"call_{uuid.uuid4().hex[:8]}",
-                        "name": "execute_query",
-                        "arguments": json.dumps(
-                            {
-                                "query": {
-                                    "kind": "apiQuery",
-                                    "variant": "aggregation",
-                                    "axes": [{"dimensions": dimensions}],
-                                    "measures": measures,
-                                }
-                            }
-                        ),
-                    }
-                ],
-            }
-
-        if "view_schema" in available_tools:
-            return {
-                "id": turn_id,
-                "model": model_id,
-                "toolCalls": [
-                    {
-                        "callId": f"call_{uuid.uuid4().hex[:8]}",
-                        "name": "view_schema",
-                        "arguments": json.dumps({}),
-                    }
-                ],
-            }
-
-    # Paso 1b: Si acabamos de ejecutar `add_widget` en el agente principal, delegar su configuración al agente `widget`
-    if did_add_widget and not did_delegate_to and not did_configure_widget and "delegate_to" in available_tools:
-        added_widget_id = "w-merchant-spend"
-        added_widget_type = "bar-chart-grouped"
-        for tc in reversed(tool_calls_since_user):
-            if tc.get("name") == "add_widget":
-                try:
-                    parsed_add = json.loads(tc.get("arguments") or "{}")
-                    if isinstance(parsed_add, dict):
-                        added_widget_id = parsed_add.get("widgetId") or added_widget_id
-                        added_widget_type = parsed_add.get("type") or added_widget_type
-                except Exception:
-                    pass
-                break
-
-        return {
-            "id": turn_id,
-            "model": model_id,
-            "toolCalls": [
-                {
-                    "callId": f"call_{uuid.uuid4().hex[:8]}",
-                    "name": "delegate_to",
-                    "arguments": json.dumps(
-                        {
-                            "type": {
-                                "id": "widget",
-                                "widgetType": added_widget_type,
-                                "widgetId": added_widget_id,
-                            },
-                            "instructions": last_user_text
-                            or f"Configure {added_widget_type} widget {added_widget_id}",
-                        }
-                    ),
-                }
-            ],
-        }
-
-    # Paso 2: Si estamos en un sub-agente delegado que requiere `complete_task`
-    if len(tool_outputs_since_user) > 0 and "complete_task" in available_tools:
-        already_completed = any(
-            isinstance(item, dict)
-            and item.get("type") == "function_call"
-            and item.get("name") == "complete_task"
-            for item in items_since_user
-        )
-        if not already_completed:
-            latest_out = str(tool_outputs_since_user[-1].get("output", ""))[:300]
-            return {
-                "id": turn_id,
-                "model": model_id,
-                "toolCalls": [
-                    {
-                        "callId": f"call_{uuid.uuid4().hex[:8]}",
-                        "name": "complete_task",
-                        "arguments": json.dumps(
-                            {
-                                "summary": (
-                                    f"Completed AG Studio tool execution across audit_ledger & agent_policies. "
-                                    f"Result snapshot: {latest_out}"
-                                ),
-                                "artifacts": [],
-                            }
-                        ),
-                    }
-                ],
-            }
-
-    # Paso 3: Sintetizar respuesta analítica combinando el resultado real del motor de AG Studio + estado AP2
-    latest_studio_output = (
-        str(tool_outputs_since_user[-1].get("output", "")) if tool_outputs_since_user else ""
-    )
-    pol = state["policies"].get("procurement-01", {})
-    settled_cards = [c for c in state.get("taskboard_cards", []) if c.get("status") == "PAYPAL_SETTLED"]
-    blocked_cards = [c for c in state.get("taskboard_cards", []) if c.get("status") == "BLOCKED_THREAT"]
-    quarantined_cards = [c for c in state.get("taskboard_cards", []) if c.get("status") == "QUARANTINED"]
-
-    analysis_md = (
-        f"### 🛡️ AP2 Security Shield Auditor — AG Studio Live Report\n\n"
-        f"I executed a live inspection against the **AG Studio Relational Data Engine** (`audit_ledger` ⋈ `agent_policies`):\n\n"
-        f"- **Active CFO Policy (`{pol.get('agent_id', 'procurement-01')}`):** Max Budget **${pol.get('max_budget_usd', 500.0):,.2f} USD** | Remaining **${pol.get('remaining_usd', 0.0):,.2f} USD** | Category `{pol.get('allowed_category', 'Hardware')}`\n"
-        f"- **PayPal Sandbox Settlements:** **{len(settled_cards)}** verified AP2 orders settled via APIMatic PayPal v2 SDK\n"
-        f"- **Intercepted Threats (`BLOCKED`):** **{len(blocked_cards)}** rogue/MitM/hallucination attempts blocked before PayPal Order creation\n"
-        f"- **Bryntum HITL Quarantine:** **{len(quarantined_cards)}** over-budget mandates awaiting CFO review\n"
-    )
-    if latest_studio_output:
-        compact_out = latest_studio_output[:600]
-        analysis_md += f"\n**AG Studio Data Engine Query Output:**\n```json\n{compact_out}\n```"
-
-    return {
-        "id": turn_id,
-        "model": model_id,
-        "text": analysis_md,
-    }
+    return await run_studio_adk_turn(body, state)
 
 
 @app.get("/api/stream")

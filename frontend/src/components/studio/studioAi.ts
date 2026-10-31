@@ -181,38 +181,106 @@ function parseChartRequest(
 
   let categoryField = 'audit_ledger.merchant';
   let categoryLabel = 'Comercio Destino';
-  if (lower.includes('riesgo') || lower.includes('risk')) {
-    categoryField = 'audit_ledger.risk_level';
-    categoryLabel = 'Nivel de Riesgo';
+  let isVerdictOrStatusDim = false;
+
+  if (
+    lower.includes('veredicto') ||
+    lower.includes('verdict') ||
+    lower.includes('resultado') ||
+    lower.includes('shield')
+  ) {
+    categoryField = 'audit_ledger.decision_type';
+    categoryLabel = 'Veredicto Shield';
+    isVerdictOrStatusDim = true;
   } else if (
     lower.includes('decisión') ||
     lower.includes('decision') ||
     lower.includes('estado') ||
-    lower.includes('status')
+    lower.includes('status') ||
+    lower.includes('política') ||
+    lower.includes('politica')
   ) {
-    categoryField = 'audit_ledger.policy_decision';
-    categoryLabel = 'Decisión de Política';
+    categoryField = 'audit_ledger.decision_type';
+    categoryLabel = 'Veredicto Shield / Decisión';
+    isVerdictOrStatusDim = true;
+  } else if (lower.includes('riesgo') || lower.includes('risk')) {
+    categoryField = 'audit_ledger.risk_level';
+    categoryLabel = 'Nivel de Riesgo';
+    isVerdictOrStatusDim = true;
   } else if (
-    lower.includes('categoría') ||
-    lower.includes('categoria') ||
-    lower.includes('category')
+    lower.includes('capa') ||
+    lower.includes('layer') ||
+    lower.includes('control') ||
+    lower.includes('firewall')
   ) {
-    categoryField = 'audit_ledger.category';
-    categoryLabel = 'Categoría';
+    categoryField = 'audit_ledger.control_layer';
+    categoryLabel = 'Capa de Seguridad AP2';
+    isVerdictOrStatusDim = true;
+  } else if (
+    lower.includes('cripto') ||
+    lower.includes('ed25519') ||
+    lower.includes('firma') ||
+    lower.includes('mandato')
+  ) {
+    categoryField = 'audit_ledger.ap2_mandate_status';
+    categoryLabel = 'Estado Criptográfico Ed25519';
+    isVerdictOrStatusDim = true;
+  } else if (
+    lower.includes('channel3') ||
+    lower.includes('catálogo') ||
+    lower.includes('catalogo') ||
+    lower.includes('alucinación') ||
+    lower.includes('alucinacion')
+  ) {
+    categoryField = 'audit_ledger.channel3_verified';
+    categoryLabel = 'Verificación Channel3';
+    isVerdictOrStatusDim = true;
+  } else if (
+    lower.includes('producto') ||
+    lower.includes('item') ||
+    lower.includes('artículo') ||
+    lower.includes('articulo') ||
+    lower.includes('sku')
+  ) {
+    categoryField = 'audit_ledger.item';
+    categoryLabel = 'Producto / Operación';
   } else if (lower.includes('agente') || lower.includes('agent')) {
     categoryField = 'audit_ledger.agent_id';
     categoryLabel = 'Agente IA';
-  } else if (lower.includes('capa') || lower.includes('layer')) {
-    categoryField = 'audit_ledger.control_layer';
-    categoryLabel = 'Capa de Control';
   }
 
   const isSingleSeries = SINGLE_SERIES_WIDGET_TYPES.has(widgetType);
+  const explicitUsdRequest =
+    lower.includes('usd') ||
+    lower.includes('dólar') ||
+    lower.includes('dolar') ||
+    lower.includes('monto') ||
+    lower.includes('volumen') ||
+    lower.includes('dinero') ||
+    lower.includes('capital') ||
+    lower.includes('gasto') ||
+    lower.includes('$');
+
   let valueKey: Array<{ id: string; aggregation: string }>;
   let metricLabel = 'Pagado vs Bloqueado (USD)';
 
   if (isSingleSeries) {
-    if (
+    if (isVerdictOrStatusDim && !explicitUsdRequest) {
+      valueKey = [{ id: 'audit_ledger.mandate_id', aggregation: 'count' }];
+      metricLabel = 'Total Transacciones';
+    } else if (isVerdictOrStatusDim && explicitUsdRequest) {
+      valueKey = [{ id: 'audit_ledger.amount_usd', aggregation: 'sum' }];
+      metricLabel = 'Volumen Total (USD)';
+    } else if (
+      lower.includes('count') ||
+      lower.includes('cantidad') ||
+      lower.includes('número') ||
+      lower.includes('numero') ||
+      lower.includes('transacciones')
+    ) {
+      valueKey = [{ id: 'audit_ledger.mandate_id', aggregation: 'count' }];
+      metricLabel = 'Total Transacciones';
+    } else if (
       lower.includes('bloquead') ||
       lower.includes('blocked') ||
       lower.includes('amenaza') ||
@@ -228,24 +296,20 @@ function parseChartRequest(
     ) {
       valueKey = [{ id: 'audit_ledger.settled_usd', aggregation: 'sum' }];
       metricLabel = 'Gasto Liquidado PayPal (USD)';
-    } else if (
-      lower.includes('count') ||
-      lower.includes('cantidad') ||
-      lower.includes('número') ||
-      lower.includes('numero') ||
-      lower.includes('transacciones')
-    ) {
-      valueKey = [{ id: 'audit_ledger.mandate_id', aggregation: 'count' }];
-      metricLabel = 'Total Transacciones';
     } else {
       valueKey = [{ id: 'audit_ledger.amount_usd', aggregation: 'sum' }];
       metricLabel = 'Volumen Total (USD)';
     }
   } else {
-    valueKey = [
-      { id: 'audit_ledger.settled_usd', aggregation: 'sum' },
-      { id: 'audit_ledger.blocked_usd', aggregation: 'sum' },
-    ];
+    if (isVerdictOrStatusDim && !explicitUsdRequest) {
+      valueKey = [{ id: 'audit_ledger.mandate_id', aggregation: 'count' }];
+      metricLabel = 'Total Transacciones';
+    } else {
+      valueKey = [
+        { id: 'audit_ledger.settled_usd', aggregation: 'sum' },
+        { id: 'audit_ledger.blocked_usd', aggregation: 'sum' },
+      ];
+    }
   }
 
   const widgetId =
@@ -707,7 +771,10 @@ const ap2ShieldAuditorAgent: AgAiAgentDefinition = {
     studio.executeQuery(),
     studio.viewReport(),
     studio.viewPage(),
+    studio.viewWidget(),
     studio.addWidget(),
+    studio.positionWidget(),
+    studio.removeWidget(),
     studio.addPageFilter(),
     studio.removePageFilter(),
     tools.renameThread(),

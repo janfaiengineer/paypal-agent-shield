@@ -22,6 +22,7 @@ export interface AuditEntry {
   mandate_id: string;
   item: string;
   amount: number;
+  merchant?: string;
   status: VerdictStatus;
   details: string;
 }

@@ -386,12 +386,20 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({
   // Modelo relacional multi-tabla para AG Studio 3 (`audit_ledger` ⋈ `agent_policies` + expresiones calculadas)
   const studioData = useMemo<AgDataSourcesDefinition>(() => {
     const activeAgentId = policy?.agent_id ?? 'procurement-01';
+    const cardMerchantById = new Map<string, string>();
+    for (const card of taskboardCards) {
+      if (card.id && card.merchant) {
+        cardMerchantById.set(card.id, card.merchant);
+      }
+    }
+
     const liveRows = auditLog.map((entry) => {
       const amount = Number(entry.amount ?? 0);
       const isSettled = entry.status === 'PAYPAL_COMPLETED';
       const isBlocked = entry.status === 'BLOCKED_BY_SHIELD';
       const isQuarantined = entry.status === 'QUARANTINED_HITL';
       const detailsUpper = (entry.details || '').toUpperCase();
+      const itemUpper = (entry.item || '').toUpperCase();
 
       const policyDecision = isSettled
         ? 'APPROVED_AND_CAPTURED'
@@ -420,13 +428,22 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({
           ? 'BLOCKED_MISMATCH'
           : 'VERIFIED';
 
+      const resolvedMerchant =
+        entry.merchant ||
+        cardMerchantById.get(entry.mandate_id) ||
+        (isBlocked || detailsUpper.includes('DARKWEB') || detailsUpper.includes('SPOOF')
+          ? 'hacker@darkweb.io'
+          : isQuarantined || itemUpper.includes('LAPTOP') || itemUpper.includes('MONITOR')
+            ? 'monitors-direct@sandbox.paypal.com'
+            : itemUpper.includes('CHAIR') || itemUpper.includes('POLICY')
+              ? 'office-supply@sandbox.paypal.com'
+              : 'apple-b2b@paypal.com');
+
       return {
         timestamp: entry.timestamp,
         mandate_id: entry.mandate_id,
         agent_id: activeAgentId,
-        merchant: isBlocked && detailsUpper.includes('DARKWEB')
-          ? 'hacker@darkweb.io'
-          : 'apple-b2b@paypal.com',
+        merchant: resolvedMerchant,
         item: entry.item,
         decision_type: classifyDecisionType(entry.status),
         policy_decision: policyDecision,
@@ -469,7 +486,7 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({
             { id: 'agent_id', name: 'Agente IA', format: 'textFormat' },
             { id: 'merchant', name: 'Comercio Destino', format: 'textFormat' },
             { id: 'item', name: 'Producto / Operación', format: 'textFormat' },
-            { id: 'decision_type', name: 'Decisión Financiera', format: 'textFormat' },
+            { id: 'decision_type', name: 'Veredicto Shield', format: 'textFormat' },
             { id: 'policy_decision', name: 'Estado Político AP2', format: 'textFormat' },
             { id: 'control_layer', name: 'Capa de Seguridad AP2', format: 'textFormat' },
             { id: 'risk_level', name: 'Nivel de Riesgo', format: 'textFormat' },
@@ -525,7 +542,7 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({
         },
       ],
     };
-  }, [auditLog, policy]);
+  }, [auditLog, policy, taskboardCards]);
 
   return (
     <div className="dashboard-panel">
