@@ -8,11 +8,14 @@ import {
   type AgAiModel,
   type AgAiOutputItem,
   type AgAiPromptStarter,
+  type AgAiTelemetryEvent,
+  type AgAiTelemetryObserver,
   type AgLlmAdapter,
   type AgLlmExecuteTurnOptions,
   type AgLlmRequest,
   type AgLlmResponse,
   type AgLlmResponseHandler,
+  type AgStudioApi,
 } from 'ag-studio';
 
 export const STUDIO_AI_MODELS: AgAiModel[] = [
@@ -37,19 +40,19 @@ export const STUDIO_PROMPT_STARTERS: AgAiPromptStarter[] = [
       'Inspect the audit_ledger schema and execute a query to analyze all BLOCKED transactions by agent_id, risk_level, and ap2_mandate_status. Summarize the intercepted threats and total capital protected.',
   },
   {
+    label: 'Pie chart of Shield Verdict distribution',
+    prompt:
+      'Add a pie chart widget showing the breakdown of transactions by Shield Verdict (decision_type) so we can visualize Policy Signed, PayPal Settled, Quarantined HITL, and Blocked verdicts.',
+  },
+  {
     label: 'Compare PayPal settled spend vs policy limits',
     prompt:
       'Execute a query joining audit_ledger with agent_policies to compare total approved PayPal spend against each agent max_tx_limit_usd and summarize compliance.',
   },
   {
-    label: 'Add a bar chart of spend by merchant',
+    label: 'Verify AP2 Ed25519 & Channel3 posture',
     prompt:
-      'Add a bar chart widget to the page showing total amount_usd by merchant so we can visualize vendor concentration.',
-  },
-  {
-    label: 'Verify Channel3 catalog & AP2 mandate coverage',
-    prompt:
-      'Query audit_ledger to evaluate how many transactions passed Channel3 catalog verification and AP2 Ed25519 mandate checks, and report the security posture.',
+      'Call verify_ap2_cryptographic_posture and query audit_ledger to evaluate how many transactions passed Channel3 catalog verification and AP2 Ed25519 mandate checks.',
   },
 ];
 
@@ -366,12 +369,40 @@ function synthesizeLocalTurn(request: AgLlmRequest): BackendTurnPayload {
     (item) => item.type === 'function_call' && item.name === 'add_widget'
   );
 
-  // Step 0: If we are inside the `widget` specialist agent (or have configure_widget available)
-  // and haven't called `configure_widget` yet in this turn, configure the target widget now.
   const didConfigureWidget = toolCallsSinceUser.some((tc) => tc.name === 'configure_widget');
   const didAddWidget = toolCallsSinceUser.some((tc) => tc.name === 'add_widget');
   const didDelegateTo = toolCallsSinceUser.some((tc) => tc.name === 'delegate_to');
 
+  // Step 0a: If we are inside the `page` specialist sub-agent (which starts with defaultToolCalls:
+  // [view_page, view_plan]), toolOutputs already has 2 items, so we must place the widget now.
+  if (
+    availableTools.has('add_widget') &&
+    availableTools.has('complete_task') &&
+    !didAddWidget
+  ) {
+    const chartSpec = parseChartRequest(userText, allAddWidgets.length);
+    return {
+      id: turnId,
+      model: modelId,
+      toolCalls: [
+        {
+          callId: `call_${Date.now()}_add`,
+          name: 'add_widget',
+          arguments: JSON.stringify({
+            widgetId: chartSpec.widgetId,
+            type: chartSpec.widgetType,
+            xTrack: chartSpec.xTrack,
+            yTrack: chartSpec.yTrack,
+            xSpan: chartSpec.xSpan,
+            ySpan: chartSpec.ySpan,
+          }),
+        },
+      ],
+    };
+  }
+
+  // Step 0b: If we are inside the `widget` specialist agent (or have configure_widget available)
+  // and haven't called `configure_widget` yet in this turn, configure the target widget now.
   if (
     availableTools.has('configure_widget') &&
     !didConfigureWidget &&
@@ -455,6 +486,42 @@ function synthesizeLocalTurn(request: AgLlmRequest): BackendTurnPayload {
               xSpan: chartSpec.xSpan,
               ySpan: chartSpec.ySpan,
             }),
+          },
+        ],
+      };
+    }
+
+    if (chartSpec.isChartRequest && availableTools.has('delegate_to')) {
+      return {
+        id: turnId,
+        model: modelId,
+        toolCalls: [
+          {
+            callId: `call_${Date.now()}_delegate_page`,
+            name: 'delegate_to',
+            arguments: JSON.stringify({
+              type: { id: 'page' },
+              instructions:
+                `Add a ${chartSpec.widgetType} widget with widgetId '${chartSpec.widgetId}' ` +
+                `for: ${userText}`,
+            }),
+          },
+        ],
+      };
+    }
+
+    if (
+      availableTools.has('verify_ap2_cryptographic_posture') &&
+      (lower.includes('ed25519') || lower.includes('posture') || lower.includes('cryptographic'))
+    ) {
+      return {
+        id: turnId,
+        model: modelId,
+        toolCalls: [
+          {
+            callId: `call_${Date.now()}_posture`,
+            name: 'verify_ap2_cryptographic_posture',
+            arguments: JSON.stringify({ focus: 'all' }),
           },
         ],
       };
@@ -594,11 +661,11 @@ function synthesizeLocalTurn(request: AgLlmRequest): BackendTurnPayload {
     model: modelId,
     text:
       `### AP2 Security & PayPal Telemetry Audit\n\n` +
-      `I inspected the live **AG Studio** data engine (\`audit_ledger\` joined with \`agent_policies\`):\n\n` +
-      `- **Policy Enforcement:** All transactions exceeding the agent's \`max_tx_limit_usd\` ($500.00) or carrying unverified merchants / forged Ed25519 signatures were deterministically **BLOCKED** prior to PayPal Order creation.\n` +
-      `- **Channel3 Catalog Grounding:** Approved purchases were cross-checked against live Channel3 product metadata and price guardrails.\n` +
+      `I inspected the live **AG Studio** data engine (@table[audit_ledger] joined with @table[agent_policies]):\n\n` +
+      `- **Policy Enforcement:** All transactions exceeding @field[agent_policies.max_tx_limit_usd] ($500.00) or carrying unverified merchants / forged Ed25519 signatures in @field[audit_ledger.decision_type] were deterministically **BLOCKED** prior to PayPal Order creation.\n` +
+      `- **Channel3 Catalog Grounding:** Approved purchases were cross-checked via @field[audit_ledger.channel3_verified] against live Channel3 product metadata.\n` +
       `- **PayPal Sandbox Settlement:** Only ` +
-      `\`APPROVED_AND_CAPTURED\` intents received an APIMatic-validated PayPal v2 Order ID.\n` +
+      `\`APPROVED_AND_CAPTURED\` intents in @field[audit_ledger.policy_decision] received an APIMatic-validated PayPal v2 Order ID.\n` +
       (lastOutputSnippet
         ? `\n**Live Studio Tool Output Summary:**\n\`\`\`json\n${lastOutputSnippet.slice(0, 500)}\n\`\`\``
         : ''),
@@ -746,6 +813,91 @@ export const shieldStudioAdapter: AgLlmAdapter = {
 };
 
 /**
+ * Custom domain-specific client tool built with `api.defineAiTool(...)` (as highlighted in
+ * the AG Studio Agent Framework blog post) that inspects live AP2 cryptographic posture,
+ * Ed25519 mandate signatures, Channel3 ground-truth verification, and ADK Workflow telemetry.
+ */
+function createVerifyAp2PostureTool(api: AgStudioApi) {
+  return api.defineAiTool({
+    name: 'verify_ap2_cryptographic_posture',
+    description:
+      'Inspect live Google ADK AP2 Ed25519 cryptographic mandate status, Channel3 catalog ground-truth coverage, PayPal v2 sandbox settlement telemetry, and the active ADK workflow graph node.',
+    params: (s) =>
+      s.object({
+        focus: s
+          .enum(
+            ['all', 'ed25519', 'channel3', 'paypal_settlements', 'hitl_quarantine'] as const,
+            {
+              description:
+                'Specific security control layer to focus on during the forensic posture check.',
+            }
+          )
+          .optional(),
+      }),
+    execute: async (args, ctx) => {
+      try {
+        const res = await fetch('/api/state', { signal: ctx.signal });
+        if (!res.ok) {
+          return ctx.error(`Unable to read live AP2 Shield state (${res.status}).`);
+        }
+        const state = (await res.json()) as {
+          policy?: { max_spend_limit?: number; total_spent?: number };
+          audit_log?: Array<{
+            type?: string;
+            amount?: number;
+            merchant?: string;
+            channel3_verified?: boolean;
+            signature?: string;
+            paypal_order_id?: string;
+          }>;
+          pending_hitl?: unknown[];
+          adk_graph_telemetry?: { active_node?: string; status?: string };
+        };
+
+        const logs = state.audit_log ?? [];
+        const focus = args.focus ?? 'all';
+        const verdictCounts: Record<string, number> = {};
+        let channel3VerifiedCount = 0;
+        let signedCount = 0;
+        let paypalOrdersCount = 0;
+
+        for (const entry of logs) {
+          const v = entry.type ?? 'UNKNOWN';
+          verdictCounts[v] = (verdictCounts[v] ?? 0) + 1;
+          if (entry.channel3_verified) channel3VerifiedCount += 1;
+          if (entry.signature) signedCount += 1;
+          if (entry.paypal_order_id) paypalOrdersCount += 1;
+        }
+
+        const report = {
+          focus,
+          totalMandatesAudited: logs.length,
+          verdictBreakdown: verdictCounts,
+          ed25519SignedMandates: signedCount,
+          channel3CatalogVerified: channel3VerifiedCount,
+          paypalSandboxOrdersSettled: paypalOrdersCount,
+          pendingHitlQuarantineCount: (state.pending_hitl ?? []).length,
+          policyGuardrail: state.policy ?? {},
+          adkWorkflowTelemetry: state.adk_graph_telemetry ?? {},
+        };
+
+        return ctx.success(
+          `AP2 Cryptographic & Policy Posture (${focus}): ${logs.length} mandates audited, ` +
+            `${signedCount} Ed25519-signed, ${channel3VerifiedCount} Channel3-verified, ` +
+            `${paypalOrdersCount} PayPal Orders settled, ${(state.pending_hitl ?? []).length} in HITL quarantine. ` +
+            `Verdicts: ${JSON.stringify(verdictCounts)}`,
+          report
+        );
+      } catch (err) {
+        return ctx.error(
+          `Failed to inspect AP2 posture: ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    },
+  });
+}
+
+/**
  * Custom AP2 Security & Mandate Auditor agent definition that collaborates with
  * AG Studio's built-in `lead`, `data`, `widget`, `page`, and `planning` agents.
  */
@@ -762,13 +914,18 @@ const ap2ShieldAuditorAgent: AgAiAgentDefinition = {
       .join(', ');
     return (
       `You are the AP2 Security Shield Auditor embedded inside AG Studio. ` +
-      `You have direct access to the live relational data engine (${tableNames}) and Studio's built-in specialist agents (data, widget, page, planning). ` +
-      `Always ground your security and financial analysis by calling execute_query or view_schema first, or delegate chart/layout modifications to the widget and page agents.`
+      `You have direct access to the live relational data engine (${tableNames}), calculated expression tools (create_expression, update_expression, delete_expression), ` +
+      `a custom cryptographic posture tool (verify_ap2_cryptographic_posture), and Studio's built-in specialist agents (data, widget, page, planning). ` +
+      `Always ground your security and financial analysis by calling execute_query, view_schema, or verify_ap2_cryptographic_posture first, or delegate chart/layout modifications to the widget and page agents. ` +
+      `When citing fields, widgets, or tables in your responses, use Studio's interactive inline reference syntax: @field[audit_ledger.decision_type], @table[audit_ledger], and @widget[w-ap2-shield].`
     );
   },
-  tools: ({ studio, tools }) => [
+  tools: ({ api, studio, tools }) => [
     studio.viewSchema(),
     studio.executeQuery(),
+    studio.createExpression(),
+    studio.updateExpression(),
+    studio.deleteExpression(),
     studio.viewReport(),
     studio.viewPage(),
     studio.viewWidget(),
@@ -777,9 +934,28 @@ const ap2ShieldAuditorAgent: AgAiAgentDefinition = {
     studio.removeWidget(),
     studio.addPageFilter(),
     studio.removePageFilter(),
+    createVerifyAp2PostureTool(api),
+    tools.plan.view(),
+    tools.plan.update(),
+    tools.plan.clear(),
     tools.renameThread(),
     tools.delegateTo(['data', 'widget', 'page', 'planning']),
   ],
+};
+
+/**
+ * Harness telemetry observer (`AgAiTelemetryObserver`) that logs multi-agent delegation
+ * and client tool execution across the Studio AI Harness for forensic observability.
+ */
+const studioTelemetryObserver: AgAiTelemetryObserver = {
+  onEvent(event: AgAiTelemetryEvent) {
+    if (event.type === 'tool_execution_started' || event.type === 'tool_execution_finished') {
+      console.debug(
+        `[AG Studio AI Telemetry] ${event.type} | agent=${event.trace.agentId} | tool=${event.name}`,
+        event
+      );
+    }
+  },
 };
 
 /**
@@ -794,6 +970,7 @@ export const buildStudioAi: AgAiHarnessSetup = ({ api }) =>
         ...builtIn.lead,
         tools: (ctx, params) => [
           ...(builtIn.lead.tools ? builtIn.lead.tools(ctx, params) : []),
+           createVerifyAp2PostureTool(ctx.api),
           ctx.tools.delegateTo(['ap2-shield-auditor']),
         ],
         adapter: shieldStudioAdapter,
@@ -812,4 +989,5 @@ export const buildStudioAi: AgAiHarnessSetup = ({ api }) =>
     primary: 'ap2-shield-auditor',
     models: STUDIO_AI_MODELS,
     promptStarters: STUDIO_PROMPT_STARTERS,
+    observers: [studioTelemetryObserver],
   }));

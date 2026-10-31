@@ -89,7 +89,9 @@ Always use exact `table.field` identifiers when calling `configure_widget` or `e
      - Call `add_widget` with a descriptive `widgetId` (e.g. `"w-ai-verdict-pie"`), `type`, `xTrack: 0`, `yTrack: 41`, `xSpan: 24`, `ySpan: 12`.
    - **Step B (Delegating to the Widget Specialist):** Immediately after `add_widget` returns its output, if `delegate_to` is in your tools and `configure_widget` is NOT directly in your tools:
      - Call `delegate_to` with `type: {"id": "widget", "widgetType": "<the widget type>", "widgetId": "<the widgetId>"}` and clear `instructions` specifying the exact `categoryKey`, `valueKey`, and Spanish title to configure.
-   - **Step C (Inside the `widget` Specialist Sub-Agent with `configure_widget`):**
+   - **Step C (Inside the `page` Specialist Sub-Agent with `add_widget` and `complete_task`):**
+     - When `add_widget` and `complete_task` are in your tools (and `configure_widget` is not), even if `view_page` and `view_plan` already ran as `defaultToolCalls`, call `add_widget` to place the requested widget on the grid (`xTrack: 0`, `yTrack: 41`, `xSpan: 24`, `ySpan: 12`), and on the next turn call `complete_task` reporting the placed `widgetId` and `widgetType`.
+   - **Step D (Inside the `widget` Specialist Sub-Agent with `configure_widget`):**
      - If `configure_widget` is in your tools and has not been called yet, call `configure_widget` with:
        ```json
        {
@@ -107,7 +109,13 @@ Always use exact `table.field` identifiers when calling `configure_widget` or `e
        }
        ```
      - After `configure_widget` succeeds (or after `execute_query` succeeds in a delegated sub-agent), if `complete_task` is in your tools, call `complete_task` with a concise `summary` and `artifacts: []`.
-4. **Language & Tone:** Respond in clear, executive Spanish when writing the final analytical message to the user, referencing real AP2 telemetry and the chart/query results.
+4. **Calculated Columns & Measures (`create_expression`, `update_expression`, `delete_expression`):**
+   - When the user asks to create a new calculated metric or formula (e.g., average ticket, block ratio, risk score), call `create_expression` using `[table.field]` syntax (for example `SUM([audit_ledger.blocked_usd]) / COUNT([audit_ledger.mandate_id])`).
+5. **Custom Cryptographic Posture Tool (`verify_ap2_cryptographic_posture`):**
+   - When the user asks about Ed25519 cryptographic signatures, CFO public keys, Channel3 ground-truth posture, or the active ADK checkout graph node, you can call `verify_ap2_cryptographic_posture` alongside `execute_query`.
+6. **AG Studio Interactive Entity References (`@field`, `@widget`, `@table`) & Language:**
+   - Always use AG Studio's interactive chip syntax when mentioning tables, fields, or widgets in your responses: `@table[audit_ledger]`, `@table[agent_policies]`, `@field[audit_ledger.decision_type]`, `@field[audit_ledger.settled_usd]`, `@field[audit_ledger.blocked_usd]`, `@widget[w-ap2-shield]`, etc.
+   - Respond in clear, executive Spanish referencing real AP2 telemetry and the chart/query results.
 """
 
 
@@ -815,6 +823,38 @@ def run_deterministic_studio_fallback(
             ],
         }
 
+    # Paso 0b: Si estamos dentro del sub-agente especialista `page` (`add_widget` y `complete_task` disponibles,
+    # donde `view_page` y `view_plan` ya se ejecutaron automáticamente como `defaultToolCalls`), colocar el widget ahora.
+    if (
+        "add_widget" in available_tools
+        and "complete_task" in available_tools
+        and "configure_widget" not in available_tools
+        and not did_add_widget
+    ):
+        chart_spec = parse_studio_chart_request(
+            last_user_text, existing_add_count=len(all_add_widgets)
+        )
+        return {
+            "id": turn_id,
+            "model": model_id,
+            "toolCalls": [
+                {
+                    "callId": f"call_{uuid.uuid4().hex[:8]}",
+                    "name": "add_widget",
+                    "arguments": json.dumps(
+                        {
+                            "widgetId": chart_spec["widget_id"],
+                            "type": chart_spec["widget_type"],
+                            "xTrack": chart_spec["x_track"],
+                            "yTrack": chart_spec["y_track"],
+                            "xSpan": chart_spec["x_span"],
+                            "ySpan": chart_spec["y_span"],
+                        }
+                    ),
+                }
+            ],
+        }
+
     # Paso 1: Si aún no se ha invocado ninguna herramienta en este turno
     if len(tool_outputs_since_user) == 0:
         chart_spec = parse_studio_chart_request(
@@ -837,6 +877,28 @@ def run_deterministic_studio_fallback(
                                     "yTrack": chart_spec["y_track"],
                                     "xSpan": chart_spec["x_span"],
                                     "ySpan": chart_spec["y_span"],
+                                }
+                            ),
+                        }
+                    ],
+                }
+            if "delegate_to" in available_tools:
+                return {
+                    "id": turn_id,
+                    "model": model_id,
+                    "toolCalls": [
+                        {
+                            "callId": f"call_{uuid.uuid4().hex[:8]}",
+                            "name": "delegate_to",
+                            "arguments": json.dumps(
+                                {
+                                    "type": {"id": "page"},
+                                    "instructions": (
+                                        f"Place a {chart_spec['widget_type']} widget with id "
+                                        f"'{chart_spec['widget_id']}' at xTrack={chart_spec['x_track']}, "
+                                        f"yTrack={chart_spec['y_track']}, xSpan={chart_spec['x_span']}, "
+                                        f"ySpan={chart_spec['y_span']} for: {last_user_text}"
+                                    ),
                                 }
                             ),
                         }
@@ -928,10 +990,27 @@ def run_deterministic_studio_fallback(
                 ],
             }
 
-    # Paso 1b: Si acabamos de ejecutar `add_widget` en el agente principal, delegar su configuración al agente `widget`
-    if did_add_widget and not did_delegate_to and not did_configure_widget and "delegate_to" in available_tools:
-        added_widget_id = "w-merchant-spend"
-        added_widget_type = "bar-chart-grouped"
+    # Paso 1b: Si acabamos de ejecutar `add_widget` (o el sub-agente `page` acaba de colocarlo), delegar su configuración al agente `widget`
+    delegated_page_only = (
+        did_delegate_to
+        and all(
+            "\"id\": \"page\"" in (tc.get("arguments") or "")
+            or "\"id\":\"page\"" in (tc.get("arguments") or "")
+            for tc in tool_calls_since_user
+            if tc.get("name") == "delegate_to"
+        )
+    )
+    if (
+        (did_add_widget or delegated_page_only)
+        and (not did_delegate_to or delegated_page_only)
+        and not did_configure_widget
+        and "delegate_to" in available_tools
+    ):
+        fallback_spec = parse_studio_chart_request(
+            last_user_text, existing_add_count=max(0, len(all_add_widgets) - 1)
+        )
+        added_widget_id = fallback_spec["widget_id"]
+        added_widget_type = fallback_spec["widget_type"]
         for tc in reversed(tool_calls_since_user):
             if tc.get("name") == "add_widget":
                 try:
@@ -1006,11 +1085,12 @@ def run_deterministic_studio_fallback(
 
     analysis_md = (
         f"### 🛡️ AP2 Security Shield Auditor — AG Studio Live Report\n\n"
-        f"Se ejecutó la operación sobre el **Motor Relacional de AG Studio** (`audit_ledger` ⋈ `agent_policies`):\n\n"
-        f"- **Política CFO Activa (`{pol.get('agent_id', 'procurement-01')}`):** Límite **${pol.get('max_budget_usd', 200.0):,.2f} USD** | Saldo **${pol.get('remaining_usd', 200.0):,.2f} USD** | Categoría `{pol.get('allowed_category', 'OFFICE_AND_TECH')}`\n"
-        f"- **Liquidaciones PayPal Sandbox:** **{len(settled_cards)}** órdenes AP2 liquidadas vía APIMatic PayPal v2 SDK\n"
-        f"- **Amenazas Interceptadas (`BLOCKED`):** **{len(blocked_cards)}** intentos bloqueados antes de PayPal\n"
-        f"- **Cuarentena HITL (Bryntum):** **{len(quarantined_cards)}** mandatos pausados esperando firma CFO\n"
+        f"Se ejecutó la operación sobre el **Motor Relacional de AG Studio** (@table[audit_ledger] ⋈ @table[agent_policies]):\n\n"
+        f"- **Política CFO Activa (@field[agent_policies.agent_id] `{pol.get('agent_id', 'procurement-01')}`):** Límite @field[agent_policies.max_tx_limit_usd] **${pol.get('max_budget_usd', 200.0):,.2f} USD** | Saldo @field[agent_policies.remaining_usd] **${pol.get('remaining_usd', 200.0):,.2f} USD** | Categoría `{pol.get('allowed_category', 'OFFICE_AND_TECH')}`\n"
+        f"- **Veredicto Shield (@field[audit_ledger.decision_type]):**\n"
+        f"  - **Liquidaciones PayPal Sandbox (@field[audit_ledger.settled_usd]):** **{len(settled_cards)}** órdenes AP2 liquidadas vía APIMatic PayPal v2 SDK\n"
+        f"  - **Amenazas Interceptadas (@field[audit_ledger.blocked_usd]):** **{len(blocked_cards)}** intentos bloqueados antes de PayPal\n"
+        f"  - **Cuarentena HITL (Bryntum):** **{len(quarantined_cards)}** mandatos pausados esperando firma CFO\n"
     )
     if latest_studio_output:
         compact_out = latest_studio_output[:600]
