@@ -43,41 +43,41 @@ const LAYER_META: Record<
   string,
   { badge: string; label: string; color: string; bg: string; border: string; desc: string }
 > = {
-  'Límite de Presupuesto CFO': {
+  'CFO Budget Ceiling': {
     badge: 'L1',
-    label: 'L1: Límite de Presupuesto CFO (Policy Engine)',
+    label: 'L1: CFO Budget Ceiling (Policy Engine)',
     color: '#f59e0b',
     bg: 'rgba(245, 158, 11, 0.12)',
     border: 'rgba(245, 158, 11, 0.35)',
     desc: 'Enforces CFO budget ceilings & Bryntum HITL quarantine',
   },
-  'Firma Criptográfica Ed25519': {
+  'Ed25519 Cryptographic Signature': {
     badge: 'L2',
-    label: 'L2: Firma Criptográfica Ed25519 (Mandate Proof)',
+    label: 'L2: Ed25519 Cryptographic Signature (Mandate Proof)',
     color: '#38bdf8',
     bg: 'rgba(56, 189, 248, 0.12)',
     border: 'rgba(56, 189, 248, 0.35)',
     desc: 'Verifies non-repudiable Ed25519 signatures & SHA-256 chain',
   },
-  'Anti-Alucinación Channel3': {
+  'Channel3 Anti-Hallucination': {
     badge: 'L3',
-    label: 'L3: Anti-Alucinación Channel3 (Ground Truth)',
+    label: 'L3: Channel3 Anti-Hallucination (Ground Truth)',
     color: '#f43f5e',
     bg: 'rgba(244, 63, 94, 0.12)',
     border: 'rgba(244, 63, 94, 0.35)',
     desc: 'Cross-checks SKU price against Channel3 truth & blocks MitM',
   },
-  'Liquidación PayPal Sandbox': {
+  'PayPal Sandbox Settlement': {
     badge: 'L4',
-    label: 'L4: Liquidación PayPal Sandbox (APIMatic SDK)',
+    label: 'L4: PayPal Sandbox Settlement (APIMatic SDK)',
     color: '#10b981',
     bg: 'rgba(16, 185, 129, 0.12)',
     border: 'rgba(16, 185, 129, 0.35)',
     desc: 'Executes verified orders on PayPal Sandbox via APIMatic SDK',
   },
-  'Gobernanza CFO (Política)': {
+  'CFO Governance (Policy)': {
     badge: 'GOV',
-    label: 'GOV: Gobernanza CFO (Firma de Política AP2)',
+    label: 'GOV: CFO Governance (AP2 Policy Signature)',
     color: '#a855f7',
     bg: 'rgba(168, 85, 247, 0.12)',
     border: 'rgba(168, 85, 247, 0.35)',
@@ -286,7 +286,7 @@ export const Ap2ShieldPostureWidget: React.FC<AgWidgetParams<Ap2ShieldWidgetStat
           const matchedRows = rows.filter(
             (r) =>
               r.layer === layerKey ||
-              (layerKey === 'Firma Criptográfica Ed25519' && r.layer === 'Integridad Hash AP2')
+              (layerKey === 'Ed25519 Cryptographic Signature' && r.layer === 'AP2 Hash Integrity')
           );
           const layerTotal = matchedRows.reduce((sum, r) => sum + r.totalUsd, 0);
           const pctOfAll = grandTotal > 0 ? Math.min(100, Math.round((layerTotal / grandTotal) * 100)) : 0;

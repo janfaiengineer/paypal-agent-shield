@@ -1,16 +1,16 @@
 """
-Google ADK Agent dedicado para AG Studio Business Intelligence & Auditoría Forense AP2.
+Dedicated Google ADK Agent for AG Studio Business Intelligence & AP2 Forensic Auditing.
 
-Separa las responsabilidades de analítica visual y consultas relacionales (AG Studio)
-del agente transaccional de compras (`ap2_shield_agent/agent.py`), exponiendo:
-  - `AgStudioClientTool(BaseTool)` con `is_long_running=True` para pausar el `Runner`
-    de ADK cuando el modelo invoca herramientas del cliente AG Studio (`add_widget`,
-    `configure_widget`, `delegate_to`, `execute_query`, `view_schema`, `complete_task`, etc.).
-  - `create_studio_bi_adk_agent(...)` que instancia un `google.adk.agents.Agent` especializado
-    en el esquema relacional `audit_ledger` ⋈ `agent_policies`.
-  - `run_studio_adk_turn(request_body, shield_state)` que ejecuta un turno del `Runner` de ADK
-    sobre `InMemorySessionService` y cuenta con un motor determinista de respaldo si no hay
-    `GEMINI_API_KEY` configurada o si se selecciona `ap2-deterministic-auditor`.
+Separates visual analytics and relational queries (AG Studio) from the transactional
+procurement agent (`ap2_shield_agent/agent.py`), exposing:
+  - `AgStudioClientTool(BaseTool)` with `is_long_running=True` to pause the ADK `Runner`
+    whenever the model invokes AG Studio client tools (`add_widget`, `configure_widget`,
+    `delegate_to`, `execute_query`, `view_schema`, `complete_task`, etc.).
+  - `create_studio_bi_adk_agent(...)` which instantiates a `google.adk.agents.Agent` specialized
+    in the relational schema `audit_ledger` ⋈ `agent_policies`.
+  - `run_studio_adk_turn(request_body, shield_state)` which executes a turn of the ADK `Runner`
+    over `InMemorySessionService` with a deterministic fallback engine if no `GEMINI_API_KEY`
+    is configured or if `ap2-deterministic-auditor` is selected.
 """
 
 from __future__ import annotations
@@ -51,27 +51,27 @@ Your mission is to dynamically build interactive charts/widgets, execute relatio
 ### 1. Relational Schema (`audit_ledger` ⋈ `agent_policies`)
 Always use exact `table.field` identifiers when calling `configure_widget` or `execute_query`:
 
-**Table `audit_ledger` (Auditoría AP2 & PayPal Sandbox):**
+**Table `audit_ledger` (AP2 Audit & PayPal Sandbox):**
 - Dimensions (categorical / text):
-  - `audit_ledger.decision_type` — **Veredicto Shield / Decisión Financiera** (values: `"Pago Liquidado (PayPal)"`, `"Cuarentena HITL (Bryntum TaskBoard)"`, `"Capital Protegido (Bloqueado)"`, `"Gobernanza / Firma de Política"`). **Use this field whenever the user asks about "veredicto", "veredicto de shield", "verdict", "resultado", or "decisión financiera".**
-  - `audit_ledger.policy_decision` — **Estado Político AP2** (values: `"PAYPAL_COMPLETED"`, `"QUARANTINED_HITL"`, `"BLOCKED_BY_SHIELD"`, `"POLICY_SIGNED"`).
-  - `audit_ledger.control_layer` — **Capa de Seguridad AP2** (values: `"Liquidación PayPal Sandbox"`, `"Límite de Presupuesto CFO"`, `"Anti-Alucinación Channel3"`, `"Firma Criptográfica Ed25519"`, `"Integridad Hash AP2"`, `"Gobernanza CFO (Política)"`).
-  - `audit_ledger.risk_level` — **Nivel de Riesgo** (values: `"Crítico (Ataque Bloqueado)"`, `"Medio (Cuarentena HITL)"`, `"Bajo (Verificado AP2)"`, `"Informativo (Política)"`).
-  - `audit_ledger.ap2_mandate_status` — **Estado Criptográfico Ed25519** (values: `"Firma Ed25519 Válida"`, `"Pausado en Nodo ADK HITL"`, `"Firma Rechazada / Alterada"`).
-  - `audit_ledger.channel3_verified` — **Verificación Channel3** (values: `"Ground-Truth OK"`, `"Pendiente HITL"`, `"Alucinación / MitM"`, `"N/A (Gobernanza)"`).
-  - `audit_ledger.merchant` — **Comercio Destino** (e.g., `"office-supply@sandbox.paypal.com"`, `"monitors-direct@sandbox.paypal.com"`, `"hacker@darkweb.io"`, `"apple-b2b@paypal.com"`).
-  - `audit_ledger.item` — **Producto / Operación** (product name or SKU).
-  - `audit_ledger.agent_id` — **Agente IA** (e.g., `"procurement-01"`).
-  - `audit_ledger.mandate_id` — **ID de Mandato AP2** (unique identifier per row; also used with `aggregation: "count"` to count transactions/verdicts).
-  - `audit_ledger.timestamp` — **Hora** (`HH:MM:SS`).
+  - `audit_ledger.decision_type` — **Shield Verdict / Financial Decision** (values: `"Settled Payment (PayPal)"`, `"HITL Quarantine (Bryntum TaskBoard)"`, `"Protected Capital (Blocked)"`, `"Governance / Policy Signature"`). **Use this field whenever the user asks about "verdict", "shield verdict", "veredicto", "outcome", or "financial decision".**
+  - `audit_ledger.policy_decision` — **AP2 Policy Status** (values: `"APPROVED_AND_CAPTURED"`, `"QUARANTINED_HITL"`, `"BLOCKED"`, `"POLICY_SIGNED"`).
+  - `audit_ledger.control_layer` — **AP2 Security Layer** (values: `"PayPal Sandbox Settlement"`, `"CFO Budget Ceiling"`, `"Channel3 Anti-Hallucination"`, `"Ed25519 Cryptographic Signature"`, `"AP2 Hash Integrity"`, `"CFO Governance (Policy)"`).
+  - `audit_ledger.risk_level` — **Risk Level** (values: `"CRITICAL"`, `"HIGH"`, `"LOW"`).
+  - `audit_ledger.ap2_mandate_status` — **Ed25519 Cryptographic Status** (values: `"ED25519_VERIFIED"`, `"BUDGET_EXCEEDED"`, `"CRYPTO_REJECTED"`).
+  - `audit_ledger.channel3_verified` — **Channel3 Verification** (values: `"VERIFIED"`, `"BLOCKED_MISMATCH"`).
+  - `audit_ledger.merchant` — **Target Merchant** (e.g., `"office-supply@sandbox.paypal.com"`, `"monitors-direct@sandbox.paypal.com"`, `"hacker@darkweb.io"`, `"apple-b2b@paypal.com"`).
+  - `audit_ledger.item` — **Product / Operation** (product name or SKU).
+  - `audit_ledger.agent_id` — **AI Agent** (e.g., `"procurement-01"`).
+  - `audit_ledger.mandate_id` — **AP2 Mandate ID** (unique identifier per row; also used with `aggregation: "count"` to count transactions/verdicts).
+  - `audit_ledger.timestamp` — **Time** (`HH:MM:SS`).
 - Measures (numeric / currency):
-  - `audit_ledger.mandate_id` with `aggregation: "count"` — **Cantidad de Transacciones / Veredictos** (count of rows).
-  - `audit_ledger.amount_usd` with `aggregation: "sum"` or `"avg"` — **Monto Bruto (USD)** across all mandate types.
-  - `audit_ledger.tx_amount_usd` with `aggregation: "sum"` — **Monto Evaluado (USD)** across all commercial checkouts (settled + blocked + quarantined).
-  - `audit_ledger.settled_usd` with `aggregation: "sum"` — **Pagado en PayPal (USD)** (NOTE: `> 0` ONLY for settled rows; `0` for blocked/quarantined rows).
-  - `audit_ledger.blocked_usd` with `aggregation: "sum"` — **Capital Protegido / Bloqueado (USD)** (NOTE: `> 0` ONLY for blocked/quarantined rows; `0` for settled rows).
+  - `audit_ledger.mandate_id` with `aggregation: "count"` — **Transaction / Verdict Count** (count of rows).
+  - `audit_ledger.amount_usd` with `aggregation: "sum"` or `"avg"` — **Gross Amount (USD)** across all mandate types.
+  - `audit_ledger.tx_amount_usd` with `aggregation: "sum"` — **Evaluated Amount (USD)** across all commercial checkouts (settled + blocked + quarantined).
+  - `audit_ledger.settled_usd` with `aggregation: "sum"` — **Settled on PayPal (USD)** (NOTE: `> 0` ONLY for settled rows; `0` for blocked/quarantined rows).
+  - `audit_ledger.blocked_usd` with `aggregation: "sum"` — **Protected / Blocked Capital (USD)** (NOTE: `> 0` ONLY for blocked/quarantined rows; `0` for settled rows).
 
-**Table `agent_policies` (Políticas de Gobernanza CFO):**
+**Table `agent_policies` (CFO Governance Policies):**
 - `agent_policies.agent_id`, `agent_policies.policy_id`, `agent_policies.allowed_category`, `agent_policies.ap2_policy_hash`
 - Measures: `agent_policies.max_tx_limit_usd` (`avg`/`max`), `agent_policies.remaining_usd` (`avg`/`min`).
 
@@ -88,7 +88,7 @@ Always use exact `table.field` identifiers when calling `configure_widget` or `e
    - **Step A (Lead / Auditor Agent with `add_widget`):** When the user asks to create/make a chart (`pie-chart`, `donut-chart`, `bar-chart-grouped`, `column-chart-grouped`, `line-chart`, `area-chart`, `funnel-chart`, `treemap-chart`, `sunburst-chart`, etc.) and `add_widget` has NOT been called yet for this request:
      - Call `add_widget` with a descriptive `widgetId` (e.g. `"w-ai-verdict-pie"`), `type`, `xTrack: 0`, `yTrack: 41`, `xSpan: 24`, `ySpan: 12`.
    - **Step B (Delegating to the Widget Specialist):** Immediately after `add_widget` returns its output, if `delegate_to` is in your tools and `configure_widget` is NOT directly in your tools:
-     - Call `delegate_to` with `type: {"id": "widget", "widgetType": "<the widget type>", "widgetId": "<the widgetId>"}` and clear `instructions` specifying the exact `categoryKey`, `valueKey`, and Spanish title to configure.
+     - Call `delegate_to` with `type: {"id": "widget", "widgetType": "<the widget type>", "widgetId": "<the widgetId>"}` and clear `instructions` specifying the exact `categoryKey`, `valueKey`, and English title to configure.
    - **Step C (Inside the `page` Specialist Sub-Agent with `add_widget` and `complete_task`):**
      - When `add_widget` and `complete_task` are in your tools (and `configure_widget` is not), even if `view_page` and `view_plan` already ran as `defaultToolCalls`, call `add_widget` to place the requested widget on the grid (`xTrack: 0`, `yTrack: 41`, `xSpan: 24`, `ySpan: 12`), and on the next turn call `complete_task` reporting the placed `widgetId` and `widgetType`.
    - **Step D (Inside the `widget` Specialist Sub-Agent with `configure_widget`):**
@@ -99,7 +99,7 @@ Always use exact `table.field` identifiers when calling `configure_widget` or `e
          "widgetId": "<widgetId>",
          "value": {
            "format": {
-             "title": { "text": "<Descriptive Title in Spanish>", "enabled": true }
+             "title": { "text": "<Descriptive Title in English>", "enabled": true }
            },
            "dataMapping": {
              "categoryKey": [{ "id": "<table.field>" }],
@@ -115,16 +115,16 @@ Always use exact `table.field` identifiers when calling `configure_widget` or `e
    - When the user asks about Ed25519 cryptographic signatures, CFO public keys, Channel3 ground-truth posture, or the active ADK checkout graph node, you can call `verify_ap2_cryptographic_posture` alongside `execute_query`.
 6. **AG Studio Interactive Entity References (`@field`, `@widget`, `@table`) & Language:**
    - Always use AG Studio's interactive chip syntax when mentioning tables, fields, or widgets in your responses: `@table[audit_ledger]`, `@table[agent_policies]`, `@field[audit_ledger.decision_type]`, `@field[audit_ledger.settled_usd]`, `@field[audit_ledger.blocked_usd]`, `@widget[w-ap2-shield]`, etc.
-   - Respond in clear, executive Spanish referencing real AP2 telemetry and the chart/query results.
+   - Respond in clear, executive English referencing real AP2 telemetry and the chart/query results.
 """
 
 
 def _build_configure_widget_gemini_schema(raw_schema: dict[str, Any]) -> dict[str, Any]:
     """
-    Construye un JSON Schema compacto y compatible con Gemini para `configure_widget`.
-    El esquema crudo generado por `ag-studio` contiene decenas de `$defs` anidados con
-    `propertyNames` y `additionalProperties: false` que exceden el límite de estados
-    del validador de esquemas de Gemini.
+    Builds a compact Gemini-compatible JSON Schema for `configure_widget`.
+    The raw schema generated by `ag-studio` contains dozens of nested `$defs` with
+    `propertyNames` and `additionalProperties: false` that exceed Gemini's schema
+    validator state limit.
     """
     widget_id_schema: dict[str, Any] = {
         "type": "string",
@@ -236,8 +236,8 @@ def _sanitize_json_schema_for_gemini(
     tool_name: str = "",
 ) -> dict[str, Any]:
     """
-    Limpia un JSON Schema proveniente del cliente `ag-studio` para que sea 100% compatible
-    con `types.FunctionDeclaration(parameters_json_schema=...)` en Gemini / Google ADK.
+    Sanitizes a JSON Schema received from the `ag-studio` client so it is 100% compatible
+    with `types.FunctionDeclaration(parameters_json_schema=...)` in Gemini / Google ADK.
     """
     if tool_name == "configure_widget":
         return _build_configure_widget_gemini_schema(schema or {})
@@ -313,14 +313,14 @@ def _sanitize_json_schema_for_gemini(
 
 class AgStudioClientTool(BaseTool):
     """
-    Herramienta ADK (`is_long_running=True`) que representa una herramienta ejecutada en el
-    cliente navegador de `<AgStudio />` (`add_widget`, `configure_widget`, `delegate_to`,
+    ADK Tool (`is_long_running=True`) representing a client-side tool executed in the
+    `<AgStudio />` browser runtime (`add_widget`, `configure_widget`, `delegate_to`,
     `execute_query`, `view_schema`, `complete_task`, etc.).
 
-    Al marcar `is_long_running=True`, cuando el `Agent` de Google ADK decide invocar la
-    herramienta, `Runner.run_async` emite el `FunctionCall` como respuesta final del turno
-    y pausa la ejecución para que el navegador de AG Studio ejecute la acción sobre el lienzo
-    y devuelva `function_call_output` en el siguiente turno.
+    By marking `is_long_running=True`, when the Google ADK `Agent` invokes the tool,
+    `Runner.run_async` emits the `FunctionCall` as the final turn response and pauses
+    execution so the AG Studio browser runtime can perform the action on the canvas
+    and return `function_call_output` on the next turn.
     """
 
     def __init__(
@@ -352,14 +352,14 @@ class AgStudioClientTool(BaseTool):
         args: dict[str, Any],
         tool_context: ToolContext,
     ) -> Any:
-        # El navegador (`<AgStudio />`) ejecuta realmente la herramienta al recibir `toolCalls`.
+        # The browser (`<AgStudio />`) executes the tool upon receiving `toolCalls`.
         return {"status": "delegated_to_ag_studio_browser_runtime", "args": args}
 
 
 def build_live_telemetry_context(shield_state: dict[str, Any]) -> str:
     """
-    Construye un resumen compacto en tiempo real del estado AP2 (`policies`, `audit_log`,
-    `taskboard_cards`) para inyectarlo en las instrucciones del agente ADK de AG Studio.
+    Builds a compact real-time summary of the AP2 state (`policies`, `audit_log`,
+    `taskboard_cards`) to inject into the AG Studio ADK agent instructions.
     """
     pol = (shield_state.get("policies") or {}).get("procurement-01") or {}
     audit_log = shield_state.get("audit_log") or []
@@ -392,8 +392,8 @@ def create_studio_bi_adk_agent(
     shield_state: dict[str, Any],
 ) -> Agent:
     """
-    Crea una instancia del `google.adk.agents.Agent` para el turno actual de AG Studio,
-    equipándolo con las herramientas `AgStudioClientTool` activas en el sub-agente actual
+    Creates a `google.adk.agents.Agent` instance for the current AG Studio turn,
+    equipping it with the active `AgStudioClientTool` instances for the current sub-agent
     (`ap2-shield-auditor`, `lead`, `widget`, `data`, `page`, etc.).
     """
     normalized_model = model_id or "gemini-2.5-flash"
@@ -421,8 +421,8 @@ def create_studio_bi_adk_agent(
         name=STUDIO_ADK_AGENT_NAME,
         model=normalized_model,
         description=(
-            "Agente Google ADK dedicado a Business Intelligence, construcción dinámica de "
-            "gráficos y auditoría forense AP2 dentro de AG Studio 3."
+            "Google ADK Agent dedicated to Business Intelligence, dynamic chart "
+            "construction, and AP2 forensic auditing inside AG Studio 3."
         ),
         instruction=combined_instruction,
         tools=adk_tools,
@@ -433,9 +433,9 @@ def _convert_studio_input_to_adk_events_and_message(
     conv_items: list[dict[str, Any]],
 ) -> tuple[list[Event], types.Content]:
     """
-    Convierte el arreglo `input: AgAiConversationItem[]` enviado por `<AgStudio />`
-    en una lista de eventos históricos de ADK (`list[Event]`) y el `new_message` (`types.Content`)
-    que dispara `Runner.run_async`.
+    Converts the `input: AgAiConversationItem[]` array sent by `<AgStudio />`
+    into a list of historical ADK events (`list[Event]`) and the `new_message` (`types.Content`)
+    that triggers `Runner.run_async`.
     """
     call_id_to_name: dict[str, str] = {}
     role_Part_groups: list[tuple[str, list[types.Part]]] = []
@@ -496,15 +496,15 @@ def _convert_studio_input_to_adk_events_and_message(
     if not role_Part_groups:
         return [], types.Content(
             role="user",
-            parts=[types.Part.from_text(text="Analiza el estado actual del ledger AP2.")],
+            parts=[types.Part.from_text(text="Analyze the current state of the AP2 ledger.")],
         )
 
-    # Asegurar que el último grupo sea de rol 'user' para que `Runner.run_async` lo procese como `new_message`
+    # Ensure the last group has role 'user' so `Runner.run_async` processes it as `new_message`
     if role_Part_groups[-1][0] != "user":
         role_Part_groups.append(
             (
                 "user",
-                [types.Part.from_text(text="Continúa con el siguiente paso en AG Studio.")],
+                [types.Part.from_text(text="Proceed with the next step in AG Studio.")],
             )
         )
 
@@ -530,11 +530,10 @@ def parse_studio_chart_request(
     override_widget_id: str | None = None,
 ) -> dict[str, Any]:
     """
-    Parser semántico mejorado para solicitudes de gráficos en AG Studio.
-    Corrige el mapeo de `"veredicto"` / `"shield"` / `"decisión"` hacia
-    `audit_ledger.decision_type` y usa `count(audit_ledger.mandate_id)` en gráficos
-    circulares (`pie-chart`, `donut-chart`) agrupados por estado/veredicto para que
-    todas las categorías aparezcan representadas con sus tajadas reales.
+    Enhanced semantic parser for chart requests in AG Studio.
+    Maps `"verdict"` / `"shield"` / `"decision"` to `audit_ledger.decision_type`
+    and uses `count(audit_ledger.mandate_id)` on single-series charts (`pie-chart`, `donut-chart`)
+    grouped by status/verdict so that all categories are represented with visible slices.
     """
     lower = (prompt or "").lower()
     chart_intent_keywords = (
@@ -568,6 +567,10 @@ def parse_studio_chart_request(
         "gráfica",
         "grafica",
         "add widget",
+        "create a",
+        "make a",
+        "show a",
+        "build a",
         "agrega un",
         "añade un",
         "crea un",
@@ -607,84 +610,84 @@ def parse_studio_chart_request(
         else:
             widget_type = "bar-chart-grouped"
 
-    # Selección dinámica de la dimensión (`categoryKey`)
+    # Dynamic dimension selection (`categoryKey`)
     category_field = "audit_ledger.merchant"
-    category_label = "Comercio Destino"
+    category_label = "Target Merchant"
     is_verdict_or_status_dim = False
 
-    if any(k in lower for k in ("veredicto", "verdict", "resultado", "shield")):
+    if any(k in lower for k in ("veredicto", "verdict", "resultado", "outcome", "shield")):
         category_field = "audit_ledger.decision_type"
-        category_label = "Veredicto Shield"
+        category_label = "Shield Verdict"
         is_verdict_or_status_dim = True
-    elif any(k in lower for k in ("decisión", "decision", "estado", "status", "política", "politica")):
+    elif any(k in lower for k in ("decisión", "decision", "estado", "status", "política", "politica", "policy")):
         category_field = "audit_ledger.decision_type"
-        category_label = "Veredicto Shield / Decisión"
+        category_label = "Shield Verdict / Decision"
         is_verdict_or_status_dim = True
-    elif any(k in lower for k in ("riesgo", "risk", "severidad")):
+    elif any(k in lower for k in ("riesgo", "risk", "severidad", "severity")):
         category_field = "audit_ledger.risk_level"
-        category_label = "Nivel de Riesgo"
+        category_label = "Risk Level"
         is_verdict_or_status_dim = True
     elif any(k in lower for k in ("capa", "layer", "control", "firewall")):
         category_field = "audit_ledger.control_layer"
-        category_label = "Capa de Seguridad AP2"
+        category_label = "AP2 Security Layer"
         is_verdict_or_status_dim = True
-    elif any(k in lower for k in ("cripto", "ed25519", "firma", "signature", "mandato")):
+    elif any(k in lower for k in ("cripto", "crypto", "ed25519", "firma", "signature", "mandato", "mandate")):
         category_field = "audit_ledger.ap2_mandate_status"
-        category_label = "Estado Criptográfico Ed25519"
+        category_label = "Ed25519 Cryptographic Status"
         is_verdict_or_status_dim = True
-    elif any(k in lower for k in ("channel3", "catálogo", "catalogo", "alucinación", "alucinacion")):
+    elif any(k in lower for k in ("channel3", "catálogo", "catalogo", "catalog", "alucinación", "alucinacion", "hallucination")):
         category_field = "audit_ledger.channel3_verified"
-        category_label = "Verificación Channel3"
+        category_label = "Channel3 Verification"
         is_verdict_or_status_dim = True
-    elif any(k in lower for k in ("producto", "item", "artículo", "articulo", "sku", "compra")):
+    elif any(k in lower for k in ("producto", "product", "item", "artículo", "articulo", "sku", "compra", "purchase")):
         category_field = "audit_ledger.item"
-        category_label = "Producto / Operación"
+        category_label = "Product / Operation"
     elif any(k in lower for k in ("agente", "agent")):
         category_field = "audit_ledger.agent_id"
-        category_label = "Agente IA"
-    elif any(k in lower for k in ("hora", "tiempo", "time", "fecha", "cronológico")):
+        category_label = "AI Agent"
+    elif any(k in lower for k in ("hora", "tiempo", "time", "fecha", "date", "cronológico", "chronological")):
         category_field = "audit_ledger.timestamp"
-        category_label = "Hora de Auditoría"
+        category_label = "Audit Time"
 
     is_single_series = widget_type in _SINGLE_SERIES_WIDGET_TYPES
     explicit_usd_request = any(
-        k in lower for k in ("usd", "dólar", "dolar", "monto", "volumen", "dinero", "capital", "gasto", "$")
+        k in lower for k in ("usd", "dólar", "dolar", "dollar", "monto", "amount", "volumen", "volume", "dinero", "money", "capital", "gasto", "spend", "$")
     )
 
     if is_single_series:
         if is_verdict_or_status_dim and not explicit_usd_request:
-            # Para pie/donut de veredictos/estados/riesgo/capa, contar mandatos garantiza que
-            # todos los veredictos (incluyendo políticas firmadas, bloqueos y pagos) tengan tajada visible.
+            # For pie/donut of verdicts/status/risk/layer, counting mandates guarantees that
+            # all verdicts (including signed policies, blocks, and payments) have a visible slice.
             value_key = [{"id": "audit_ledger.mandate_id", "aggregation": "count"}]
-            metric_label = "Total Transacciones"
+            metric_label = "Total Transactions"
         elif is_verdict_or_status_dim and explicit_usd_request:
             value_key = [{"id": "audit_ledger.amount_usd", "aggregation": "sum"}]
-            metric_label = "Volumen Total (USD)"
-        elif any(k in lower for k in ("count", "cantidad", "número", "numero", "transacciones", "operaciones")):
+            metric_label = "Total Volume (USD)"
+        elif any(k in lower for k in ("count", "cantidad", "número", "numero", "number", "transacciones", "transactions", "operaciones", "operations")):
             value_key = [{"id": "audit_ledger.mandate_id", "aggregation": "count"}]
-            metric_label = "Total Transacciones"
-        elif any(k in lower for k in ("bloquead", "blocked", "amenaza", "threat", "protegid")):
+            metric_label = "Total Transactions"
+        elif any(k in lower for k in ("bloquead", "blocked", "amenaza", "threat", "protegid", "protected")):
             value_key = [{"id": "audit_ledger.blocked_usd", "aggregation": "sum"}]
-            metric_label = "Capital Protegido (USD)"
-        elif any(k in lower for k in ("settled", "liquidad", "pagad", "aprob")):
+            metric_label = "Protected Capital (USD)"
+        elif any(k in lower for k in ("settled", "liquidad", "pagad", "paid", "aprob", "approved")):
             value_key = [{"id": "audit_ledger.settled_usd", "aggregation": "sum"}]
-            metric_label = "Pagado en PayPal (USD)"
+            metric_label = "Settled on PayPal (USD)"
         else:
             value_key = [{"id": "audit_ledger.amount_usd", "aggregation": "sum"}]
-            metric_label = "Volumen Total (USD)"
+            metric_label = "Total Volume (USD)"
     else:
-        if any(k in lower for k in ("count", "cantidad", "número", "numero", "transacciones")):
+        if any(k in lower for k in ("count", "cantidad", "número", "numero", "number", "transacciones", "transactions")):
             value_key = [{"id": "audit_ledger.mandate_id", "aggregation": "count"}]
-            metric_label = "Total Transacciones"
+            metric_label = "Total Transactions"
         elif is_verdict_or_status_dim and not explicit_usd_request:
             value_key = [{"id": "audit_ledger.mandate_id", "aggregation": "count"}]
-            metric_label = "Total Transacciones"
+            metric_label = "Total Transactions"
         else:
             value_key = [
                 {"id": "audit_ledger.settled_usd", "aggregation": "sum"},
                 {"id": "audit_ledger.blocked_usd", "aggregation": "sum"},
             ]
-            metric_label = "Pagado vs Protegido (USD)"
+            metric_label = "Settled vs Protected (USD)"
 
     short_type = widget_type.split("-chart")[0]
     widget_id = override_widget_id or (
@@ -697,7 +700,7 @@ def parse_studio_chart_request(
         "is_chart_request": is_chart_request,
         "widget_type": widget_type,
         "widget_id": widget_id,
-        "title": f"Distribución por {category_label}: {metric_label}",
+        "title": f"Distribution by {category_label}: {metric_label}",
         "category_key": [{"id": category_field}],
         "value_key": value_key,
         "x_track": 0,
@@ -715,8 +718,8 @@ def run_deterministic_studio_fallback(
     model_id: str,
 ) -> dict[str, Any]:
     """
-    Motor determinista de respaldo para AG Studio cuando `ap2-deterministic-auditor`
-    está seleccionado o cuando no hay `GEMINI_API_KEY` disponible.
+    Deterministic fallback engine for AG Studio when `ap2-deterministic-auditor`
+    is selected or when no `GEMINI_API_KEY` is available.
     """
     conv_items = request_body.get("input") or []
     tools_schema = request_body.get("tools") or []
@@ -761,7 +764,7 @@ def run_deterministic_studio_fallback(
     did_configure_widget = any(tc.get("name") == "configure_widget" for tc in tool_calls_since_user)
     did_delegate_to = any(tc.get("name") == "delegate_to" for tc in tool_calls_since_user)
 
-    # Paso 0: Sub-agente especialista `widget` (`configure_widget`)
+    # Step 0: `widget` specialist sub-agent (`configure_widget`)
     if (
         "configure_widget" in available_tools
         and not did_configure_widget
@@ -823,8 +826,8 @@ def run_deterministic_studio_fallback(
             ],
         }
 
-    # Paso 0b: Si estamos dentro del sub-agente especialista `page` (`add_widget` y `complete_task` disponibles,
-    # donde `view_page` y `view_plan` ya se ejecutaron automáticamente como `defaultToolCalls`), colocar el widget ahora.
+    # Step 0b: Inside the `page` specialist sub-agent (`add_widget` & `complete_task` available,
+    # where `view_page` and `view_plan` already ran automatically as `defaultToolCalls`), place the widget now.
     if (
         "add_widget" in available_tools
         and "complete_task" in available_tools
@@ -855,7 +858,7 @@ def run_deterministic_studio_fallback(
             ],
         }
 
-    # Paso 1: Si aún no se ha invocado ninguna herramienta en este turno
+    # Step 1: No tool invoked yet in this turn
     if len(tool_outputs_since_user) == 0:
         chart_spec = parse_studio_chart_request(
             last_user_text, existing_add_count=len(all_add_widgets)
@@ -990,7 +993,7 @@ def run_deterministic_studio_fallback(
                 ],
             }
 
-    # Paso 1b: Si acabamos de ejecutar `add_widget` (o el sub-agente `page` acaba de colocarlo), delegar su configuración al agente `widget`
+    # Step 1b: If we just executed `add_widget` (or the `page` sub-agent placed it), delegate its configuration to the `widget` agent
     delegated_page_only = (
         did_delegate_to
         and all(
@@ -1044,7 +1047,7 @@ def run_deterministic_studio_fallback(
             ],
         }
 
-    # Paso 2: Si estamos en un sub-agente delegado que requiere `complete_task`
+    # Step 2: Inside a delegated sub-agent that requires `complete_task`
     if len(tool_outputs_since_user) > 0 and "complete_task" in available_tools:
         already_completed = any(
             isinstance(item, dict)
@@ -1074,7 +1077,7 @@ def run_deterministic_studio_fallback(
                 ],
             }
 
-    # Paso 3: Respuesta analítica final
+    # Step 3: Final analytical response
     latest_studio_output = (
         str(tool_outputs_since_user[-1].get("output", "")) if tool_outputs_since_user else ""
     )
@@ -1085,16 +1088,16 @@ def run_deterministic_studio_fallback(
 
     analysis_md = (
         f"### 🛡️ AP2 Security Shield Auditor — AG Studio Live Report\n\n"
-        f"Se ejecutó la operación sobre el **Motor Relacional de AG Studio** (@table[audit_ledger] ⋈ @table[agent_policies]):\n\n"
-        f"- **Política CFO Activa (@field[agent_policies.agent_id] `{pol.get('agent_id', 'procurement-01')}`):** Límite @field[agent_policies.max_tx_limit_usd] **${pol.get('max_budget_usd', 200.0):,.2f} USD** | Saldo @field[agent_policies.remaining_usd] **${pol.get('remaining_usd', 200.0):,.2f} USD** | Categoría `{pol.get('allowed_category', 'OFFICE_AND_TECH')}`\n"
-        f"- **Veredicto Shield (@field[audit_ledger.decision_type]):**\n"
-        f"  - **Liquidaciones PayPal Sandbox (@field[audit_ledger.settled_usd]):** **{len(settled_cards)}** órdenes AP2 liquidadas vía APIMatic PayPal v2 SDK\n"
-        f"  - **Amenazas Interceptadas (@field[audit_ledger.blocked_usd]):** **{len(blocked_cards)}** intentos bloqueados antes de PayPal\n"
-        f"  - **Cuarentena HITL (Bryntum):** **{len(quarantined_cards)}** mandatos pausados esperando firma CFO\n"
+        f"Executed operation on the **AG Studio Relational Engine** (@table[audit_ledger] ⋈ @table[agent_policies]):\n\n"
+        f"- **Active CFO Policy (@field[agent_policies.agent_id] `{pol.get('agent_id', 'procurement-01')}`):** Limit @field[agent_policies.max_tx_limit_usd] **${pol.get('max_budget_usd', 200.0):,.2f} USD** | Remaining @field[agent_policies.remaining_usd] **${pol.get('remaining_usd', 200.0):,.2f} USD** | Category `{pol.get('allowed_category', 'OFFICE_AND_TECH')}`\n"
+        f"- **Shield Verdict (@field[audit_ledger.decision_type]):**\n"
+        f"  - **PayPal Sandbox Settlements (@field[audit_ledger.settled_usd]):** **{len(settled_cards)}** AP2 orders settled via APIMatic PayPal v2 SDK\n"
+        f"  - **Intercepted Threats (@field[audit_ledger.blocked_usd]):** **{len(blocked_cards)}** attempts blocked prior to PayPal\n"
+        f"  - **HITL Quarantine (Bryntum):** **{len(quarantined_cards)}** mandates paused awaiting CFO signature\n"
     )
     if latest_studio_output:
         compact_out = latest_studio_output[:600]
-        analysis_md += f"\n**Resultado del Motor AG Studio:**\n```json\n{compact_out}\n```"
+        analysis_md += f"\n**AG Studio Engine Result:**\n```json\n{compact_out}\n```"
 
     return {
         "id": turn_id,
@@ -1108,10 +1111,10 @@ def _safeguard_configure_widget_args(
     conv_items: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """
-    Verifica y enriquece los argumentos de `configure_widget` generados por el LLM para
-    garantizar que ningún gráfico circular (`pie-chart`, `donut-chart`) agrupado por
-    veredicto/estado use `settled_usd` o `blocked_usd` como métrica única (lo cual
-    colapsaría el gráfico en un único círculo azul por los valores en $0.00).
+    Verifies and enriches `configure_widget` arguments generated by the LLM to
+    guarantee that no single-series chart (`pie-chart`, `donut-chart`) grouped by
+    verdict/status uses `settled_usd` or `blocked_usd` as its sole metric (which
+    would collapse the chart into a single circle due to $0.00 values).
     """
     args = copy.deepcopy(raw_args) if isinstance(raw_args, dict) else {}
     val = args.get("value")
@@ -1136,7 +1139,7 @@ def _safeguard_configure_widget_args(
         "audit_ledger.channel3_verified",
     }
 
-    # Determinar si es un widget de serie única (pie/donut/funnel/treemap/sunburst)
+    # Determine whether this is a single-series widget (pie/donut/funnel/treemap/sunburst)
     is_single_series_widget = len(val_keys) == 1
     for item in reversed(conv_items):
         if isinstance(item, dict) and item.get("type") == "function_call_output":
@@ -1161,9 +1164,9 @@ async def run_studio_adk_turn(
     shield_state: dict[str, Any],
 ) -> dict[str, Any]:
     """
-    Ejecuta un turno completo del agente Google ADK (`ap2_studio_bi_agent`) para AG Studio.
-    Si el usuario seleccionó explícitamente `ap2-deterministic-auditor` o no existe API Key
-    de Gemini en el entorno, delega limpiamente al motor determinista mejorado.
+    Executes a full turn of the Google ADK agent (`ap2_studio_bi_agent`) for AG Studio.
+    If the user explicitly selected `ap2-deterministic-auditor` or no Gemini API Key
+    is configured in the environment, cleanly delegates to the enhanced deterministic engine.
     """
     conv_items = request_body.get("input") or []
     tools_schema = request_body.get("tools") or []

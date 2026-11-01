@@ -81,7 +81,7 @@ const SecretField: React.FC<SecretFieldProps> = ({
         <button
           type="button"
           onClick={() => setVisible((v) => !v)}
-          title={visible ? 'Ocultar credencial' : 'Mostrar credencial'}
+          title={visible ? 'Hide credential' : 'Show credential'}
           style={{
             position: 'absolute',
             right: '6px',
@@ -159,17 +159,17 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSav
         }}
       >
         <h3 style={{ margin: '0 0 6px 0', fontSize: '16px' }}>
-          🔐 Configurar Credenciales en Caliente (BYOK)
+          🔐 Hot-Configure Runtime Credentials (BYOK)
         </h3>
         <p style={{ margin: '0 0 16px 0', fontSize: '12px', color: '#94a3b8', lineHeight: 1.4 }}>
-          Las llaves se inyectan exclusivamente en la memoria del <b>Shield Control Plane</b>. El
-          LLM nunca tiene acceso de lectura a tus secretos de PayPal.
+          Keys are injected exclusively into the in-memory <b>Shield Control Plane</b>. The LLM
+          never has read access to your PayPal secrets.
         </p>
 
         <SecretField
           id="cfg-gemini"
           label="GOOGLE_API_KEY (Gemini / ADK)"
-          placeholder="AIzaSy... (Dejar vacío para conservar actual)"
+          placeholder="AIzaSy... (Leave empty to keep current)"
           value={googleApiKey}
           onChange={setGoogleApiKey}
         >
@@ -185,14 +185,14 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSav
               textDecoration: 'none',
             }}
           >
-            🔗 Obtener API Key en Google AI Studio (aistudio.google.com) ↗
+            🔗 Get API Key in Google AI Studio (aistudio.google.com) ↗
           </a>
         </SecretField>
 
         <SecretField
           id="cfg-pp-id"
           label="PAYPAL_CLIENT_ID (Sandbox)"
-          placeholder="Client ID de developer.paypal.com"
+          placeholder="Client ID from developer.paypal.com"
           value={paypalClientId}
           onChange={setPaypalClientId}
         >
@@ -208,14 +208,14 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSav
               textDecoration: 'none',
             }}
           >
-            🔗 Obtener Client ID en PayPal Developer Dashboard ↗
+            🔗 Get Client ID in PayPal Developer Dashboard ↗
           </a>
         </SecretField>
 
         <SecretField
           id="cfg-pp-secret"
           label="PAYPAL_CLIENT_SECRET (Sandbox)"
-          placeholder="Client Secret de PayPal Sandbox"
+          placeholder="PayPal Sandbox Client Secret"
           value={paypalClientSecret}
           onChange={setPaypalClientSecret}
         >
@@ -233,7 +233,7 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSav
               rel="noopener noreferrer"
               style={{ fontSize: '11px', color: '#38bdf8', textDecoration: 'none' }}
             >
-              🔗 Obtener Client Secret ↗
+              🔗 Get Client Secret ↗
             </a>
             <a
               href="https://developer.paypal.com/dashboard/api-calls/sandbox"
@@ -241,7 +241,7 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSav
               rel="noopener noreferrer"
               style={{ fontSize: '11px', color: '#34d399', textDecoration: 'none' }}
             >
-              📡 Ver Logs de API Calls (Sandbox) ↗
+              📡 View API Call Logs (Sandbox) ↗
             </a>
           </div>
         </SecretField>
@@ -249,7 +249,7 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSav
         <SecretField
           id="cfg-c3-key"
           label="CHANNEL3_API_KEY (Product Graph)"
-          placeholder="c3_live_... (Dejar vacío para conservar actual)"
+          placeholder="c3_live_... (Leave empty to keep current)"
           value={channel3ApiKey}
           onChange={setChannel3ApiKey}
         >
@@ -265,14 +265,14 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSav
               textDecoration: 'none',
             }}
           >
-            🔗 Obtener API Key en Channel3 (trychannel3.com/dashboard/api) ↗
+            🔗 Get API Key on Channel3 (trychannel3.com/dashboard/api) ↗
           </a>
         </SecretField>
 
         <SecretField
           id="cfg-render-key"
           label="RENDER_API_KEY (Render Workflows Orchestration)"
-          placeholder="rnd_... (Opcional - Activa Render Workflows remoto)"
+          placeholder="rnd_... (Optional - Enables remote Render Workflows)"
           value={renderApiKey}
           onChange={setRenderApiKey}
         >
@@ -288,7 +288,7 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSav
               textDecoration: 'none',
             }}
           >
-            🔗 Obtener API Key en Render Dashboard ↗
+            🔗 Get API Key in Render Dashboard ↗
           </a>
         </SecretField>
 
@@ -306,7 +306,7 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSav
               fontSize: '12px',
             }}
           >
-            Cancelar
+            Cancel
           </button>
           <button
             type="button"
@@ -323,7 +323,7 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSav
               fontSize: '12px',
             }}
           >
-            {saving ? 'Guardando...' : 'Guardar y Activar'}
+            {saving ? 'Saving...' : 'Save & Activate'}
           </button>
         </div>
       </div>

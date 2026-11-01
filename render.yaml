@@ -1,5 +1,5 @@
 services:
-  # 1. Consola Web Unificada (FastAPI + AG Grid + Google ADK Agent)
+  # 1. Unified Web Console (FastAPI + AG Grid + Google ADK Agent)
   - type: web
     name: paypal-agent-shield-web
     runtime: python
@@ -30,7 +30,7 @@ services:
       - key: RENDER_API_KEY
         sync: false
 
-  # 2. Motor Distribuido Render Workflows (Requisito oficial del Hackatón)
+  # 2. Distributed Render Workflows Engine (Official Hackathon Requirement)
   - type: workflow
     name: paypal-shield-workflow
     runtime: python

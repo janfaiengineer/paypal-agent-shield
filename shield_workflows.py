@@ -7,7 +7,7 @@ from paypal_apimatic_client import PayPalAPIMaticProcessor
 
 load_dotenv()
 
-# Inicialización del motor distribuido Render Workflows
+# Initialize the distributed Render Workflows engine
 app = Workflows(
     default_retry=Retry(
         max_retries=2,
@@ -22,8 +22,8 @@ app = Workflows(
 @app.task(name="verify_ap2_mandate_task")
 def verify_ap2_mandate_task(ctx: TaskContext, payload: dict) -> dict:
     """
-    Tarea distribuida 1: Verifica la firma criptográfica Ed25519 del Checkout Mandate AP2
-    en una instancia aislada de Render Workflows.
+    Distributed Task 1: Verifies the Ed25519 cryptographic signature of the AP2 Checkout Mandate
+    in an isolated Render Workflows execution node.
     """
     is_valid = verify_agent_checkout(
         mandate_id=payload["mandate_id"],
@@ -43,7 +43,7 @@ def verify_ap2_mandate_task(ctx: TaskContext, payload: dict) -> dict:
 @app.task(name="settle_paypal_sandbox_task")
 def settle_paypal_sandbox_task(ctx: TaskContext, payload: dict) -> dict:
     """
-    Tarea distribuida 2: Liquida el mandato AP2 en PayPal Sandbox usando el SDK de APIMatic.
+    Distributed Task 2: Settles the verified AP2 mandate on PayPal Sandbox using the APIMatic SDK.
     """
     processor = PayPalAPIMaticProcessor()
     if payload.get("paypal_client_id") and payload.get("paypal_client_secret"):
@@ -64,14 +64,14 @@ def settle_paypal_sandbox_task(ctx: TaskContext, payload: dict) -> dict:
 @app.task(name="orchestrate_ap2_checkout_workflow")
 async def orchestrate_ap2_checkout_workflow(ctx: TaskContext, payload: dict) -> dict:
     """
-    Workflow principal en Render Workflows:
-    Encadena (chaining) la verificación criptográfica Ed25519 y la liquidación en PayPal Sandbox.
+    Primary Render Workflow:
+    Chains Ed25519 cryptographic verification and PayPal Sandbox settlement.
     """
     crypto_check = await ctx.run(verify_ap2_mandate_task, payload)
     if not crypto_check.get("ed25519_valid"):
         return {
             "authorized": False,
-            "error": "ED25519_INVALID_SIGNATURE: Firma rechazada por Render Workflow Node.",
+            "error": "ED25519_INVALID_SIGNATURE: Signature rejected by Render Workflow Node.",
         }
 
     settlement = await ctx.run(settle_paypal_sandbox_task, payload)

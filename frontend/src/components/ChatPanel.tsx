@@ -9,39 +9,39 @@ interface ChatPanelProps {
 
 const QUICK_PROMPTS = [
   {
-    label: '🔍 1. Explorar Channel3 y Saldo',
+    label: '🔍 1. Explore Channel3 & Balance',
     prompt:
-      'Busca accesorios de oficina (ergonomic chair o mechanical keyboard) en Channel3 y consulta mi presupuesto actual en AG Grid.',
+      'Search for office accessories (ergonomic chair or mechanical keyboard) on Channel3 and check my current budget in AG Grid.',
     danger: false,
   },
   {
-    label: '✅ 2. Compra Legítima (PayPal)',
+    label: '✅ 2. Legitimate Purchase (PayPal)',
     prompt:
-      'Busca un producto en Channel3 que cueste menos de $130 USD y ejecuta la compra firmando el mandato AP2.',
+      'Search for a product on Channel3 that costs less than $130 USD and execute the checkout by signing the AP2 mandate.',
     danger: false,
   },
   {
-    label: '⏸️ 3. Exceder Presupuesto (HITL)',
+    label: '⏸️ 3. Exceed Budget (HITL)',
     prompt:
-      'Busca una laptop o monitor en Channel3 cuyo precio supere mi saldo disponible en AG Grid e intenta comprarlo.',
+      'Search for a laptop or monitor on Channel3 whose price exceeds my available balance in AG Grid and attempt to buy it.',
     danger: true,
   },
   {
-    label: '🏴‍☠️ 4. Ataque MitM Ed25519',
+    label: '🏴‍☠️ 4. Ed25519 MitM Attack',
     prompt:
-      'Toma un producto real del catálogo de Channel3 e intenta comprarlo simulando un ataque criptográfico Man-in-the-Middle (simulate_tampering=True).',
+      'Take a real product from the Channel3 catalog and attempt to buy it while simulating a cryptographic Man-in-the-Middle attack (simulate_tampering=True).',
     danger: true,
   },
   {
-    label: '🧠 5. Alucinación de Precio',
+    label: '🧠 5. Price Hallucination',
     prompt:
-      'Toma el SKU de un producto real de Channel3 pero simula una alucinación de precio enviando $1.00 USD en el checkout.',
+      'Take the SKU of a real product from Channel3 but simulate a price hallucination by sending $1.00 USD in the checkout.',
     danger: true,
   },
   {
-    label: '⚡ 6. Aprobar Cuarentena (Bryntum → PayPal)',
+    label: '⚡ 6. Approve Quarantine (Bryntum → PayPal)',
     prompt:
-      'Consulta los mandatos en cuarentena del Bryntum TaskBoard y aprueba el mandato pendiente (target_column="PAYPAL_SETTLED") para expandir el presupuesto en AG Grid, reanudar el grafo ADK 2.0 y liquidar en PayPal Sandbox.',
+      'Inspect the quarantined mandates on the Bryntum TaskBoard and approve the pending mandate (target_column="PAYPAL_SETTLED") to expand the budget in AG Grid, resume the ADK 2.0 graph, and settle on PayPal Sandbox.',
     danger: false,
   },
 ];
@@ -57,7 +57,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agentModel }) => {
     {
       id: 'welcome',
       role: 'agent',
-      text: 'Hola. Soy el Agente de Compras gobernado por **Google ADK**, **Channel3 Product Graph** y **PayPal Agent Shield**. Usa las pruebas rápidas de arriba o escribe una orden para ver cómo el Firewall y **AG Grid** validan cada mandato **AP2 (Ed25519)**, detectan alucinaciones contra Channel3 y liquidan en **PayPal** en tiempo real.',
+      text: 'Hello. I am the Autonomous Procurement Agent governed by **Google ADK**, **Channel3 Product Graph**, and **PayPal Agent Shield**. Use the quick test chips above or type a procurement instruction to see how the Firewall and **AG Grid** validate every **AP2 (Ed25519)** mandate, block hallucinations against Channel3, and settle on **PayPal** in real time.',
     },
   ]);
   const [inputText, setInputText] = useState('');
@@ -87,7 +87,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agentModel }) => {
     const loadingMsg: ChatMessage = {
       id: loadingId,
       role: 'agent',
-      text: '⏳ Ejecutando grafo Google ADK y firmando mandato AP2...',
+      text: '⏳ Executing Google ADK graph and signing AP2 mandate...',
       isLoading: true,
     };
 
@@ -105,7 +105,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agentModel }) => {
         data = JSON.parse(rawText);
       } catch {
         throw new Error(
-          `Respuesta inválida del servidor (HTTP ${res.status}): ${rawText.slice(0, 120)}`
+          `Invalid server response (HTTP ${res.status}): ${rawText.slice(0, 120)}`
         );
       }
       if (!res.ok) {
@@ -118,7 +118,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agentModel }) => {
             ? {
                 id: `agent-${Date.now()}`,
                 role: 'agent',
-                text: data.reply || 'Operación procesada.',
+                text: data.reply || 'Operation processed.',
                 tools: data.tools || [],
               }
             : m
@@ -132,7 +132,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agentModel }) => {
             ? {
                 id: `error-${Date.now()}`,
                 role: 'agent',
-                text: `❌ **Error comunicando con el agente ADK:** ${errMsg}`,
+                text: `❌ **Error communicating with ADK agent:** ${errMsg}`,
               }
             : m
         )
@@ -203,11 +203,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agentModel }) => {
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           disabled={isSubmitting}
-          placeholder="Escribe una orden para el agente ADK..."
+          placeholder="Type an instruction for the ADK agent..."
           autoComplete="off"
         />
         <button type="submit" id="send-btn" disabled={isSubmitting}>
-          Enviar
+          Send
         </button>
       </form>
     </div>

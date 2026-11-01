@@ -183,7 +183,7 @@ function parseChartRequest(
   }
 
   let categoryField = 'audit_ledger.merchant';
-  let categoryLabel = 'Comercio Destino';
+  let categoryLabel = 'Target Merchant';
   let isVerdictOrStatusDim = false;
 
   if (
@@ -193,7 +193,7 @@ function parseChartRequest(
     lower.includes('shield')
   ) {
     categoryField = 'audit_ledger.decision_type';
-    categoryLabel = 'Veredicto Shield';
+    categoryLabel = 'Shield Verdict';
     isVerdictOrStatusDim = true;
   } else if (
     lower.includes('decisión') ||
@@ -204,11 +204,11 @@ function parseChartRequest(
     lower.includes('politica')
   ) {
     categoryField = 'audit_ledger.decision_type';
-    categoryLabel = 'Veredicto Shield / Decisión';
+    categoryLabel = 'Shield Verdict / Decision';
     isVerdictOrStatusDim = true;
   } else if (lower.includes('riesgo') || lower.includes('risk')) {
     categoryField = 'audit_ledger.risk_level';
-    categoryLabel = 'Nivel de Riesgo';
+    categoryLabel = 'Risk Level';
     isVerdictOrStatusDim = true;
   } else if (
     lower.includes('capa') ||
@@ -217,39 +217,44 @@ function parseChartRequest(
     lower.includes('firewall')
   ) {
     categoryField = 'audit_ledger.control_layer';
-    categoryLabel = 'Capa de Seguridad AP2';
+    categoryLabel = 'AP2 Security Layer';
     isVerdictOrStatusDim = true;
   } else if (
     lower.includes('cripto') ||
     lower.includes('ed25519') ||
     lower.includes('firma') ||
-    lower.includes('mandato')
+    lower.includes('signature') ||
+    lower.includes('mandato') ||
+    lower.includes('mandate')
   ) {
     categoryField = 'audit_ledger.ap2_mandate_status';
-    categoryLabel = 'Estado Criptográfico Ed25519';
+    categoryLabel = 'Ed25519 Cryptographic Status';
     isVerdictOrStatusDim = true;
   } else if (
     lower.includes('channel3') ||
     lower.includes('catálogo') ||
     lower.includes('catalogo') ||
+    lower.includes('catalog') ||
     lower.includes('alucinación') ||
-    lower.includes('alucinacion')
+    lower.includes('alucinacion') ||
+    lower.includes('hallucination')
   ) {
     categoryField = 'audit_ledger.channel3_verified';
-    categoryLabel = 'Verificación Channel3';
+    categoryLabel = 'Channel3 Verification';
     isVerdictOrStatusDim = true;
   } else if (
     lower.includes('producto') ||
+    lower.includes('product') ||
     lower.includes('item') ||
     lower.includes('artículo') ||
     lower.includes('articulo') ||
     lower.includes('sku')
   ) {
     categoryField = 'audit_ledger.item';
-    categoryLabel = 'Producto / Operación';
+    categoryLabel = 'Product / Operation';
   } else if (lower.includes('agente') || lower.includes('agent')) {
     categoryField = 'audit_ledger.agent_id';
-    categoryLabel = 'Agente IA';
+    categoryLabel = 'AI Agent';
   }
 
   const isSingleSeries = SINGLE_SERIES_WIDGET_TYPES.has(widgetType);
@@ -257,32 +262,37 @@ function parseChartRequest(
     lower.includes('usd') ||
     lower.includes('dólar') ||
     lower.includes('dolar') ||
+    lower.includes('dollar') ||
     lower.includes('monto') ||
+    lower.includes('amount') ||
     lower.includes('volumen') ||
+    lower.includes('volume') ||
     lower.includes('dinero') ||
     lower.includes('capital') ||
     lower.includes('gasto') ||
+    lower.includes('spend') ||
     lower.includes('$');
 
   let valueKey: Array<{ id: string; aggregation: string }>;
-  let metricLabel = 'Pagado vs Bloqueado (USD)';
+  let metricLabel = 'Settled vs Blocked (USD)';
 
   if (isSingleSeries) {
     if (isVerdictOrStatusDim && !explicitUsdRequest) {
       valueKey = [{ id: 'audit_ledger.mandate_id', aggregation: 'count' }];
-      metricLabel = 'Total Transacciones';
+      metricLabel = 'Total Transactions';
     } else if (isVerdictOrStatusDim && explicitUsdRequest) {
       valueKey = [{ id: 'audit_ledger.amount_usd', aggregation: 'sum' }];
-      metricLabel = 'Volumen Total (USD)';
+      metricLabel = 'Total Volume (USD)';
     } else if (
       lower.includes('count') ||
       lower.includes('cantidad') ||
       lower.includes('número') ||
       lower.includes('numero') ||
-      lower.includes('transacciones')
+      lower.includes('transacciones') ||
+      lower.includes('transactions')
     ) {
       valueKey = [{ id: 'audit_ledger.mandate_id', aggregation: 'count' }];
-      metricLabel = 'Total Transacciones';
+      metricLabel = 'Total Transactions';
     } else if (
       lower.includes('bloquead') ||
       lower.includes('blocked') ||
@@ -290,23 +300,24 @@ function parseChartRequest(
       lower.includes('threat')
     ) {
       valueKey = [{ id: 'audit_ledger.blocked_usd', aggregation: 'sum' }];
-      metricLabel = 'Capital Bloqueado (USD)';
+      metricLabel = 'Blocked Capital (USD)';
     } else if (
       lower.includes('settled') ||
       lower.includes('liquidad') ||
       lower.includes('pagad') ||
-      lower.includes('aprob')
+      lower.includes('aprob') ||
+      lower.includes('approved')
     ) {
       valueKey = [{ id: 'audit_ledger.settled_usd', aggregation: 'sum' }];
-      metricLabel = 'Gasto Liquidado PayPal (USD)';
+      metricLabel = 'PayPal Settled Spend (USD)';
     } else {
       valueKey = [{ id: 'audit_ledger.amount_usd', aggregation: 'sum' }];
-      metricLabel = 'Volumen Total (USD)';
+      metricLabel = 'Total Volume (USD)';
     }
   } else {
     if (isVerdictOrStatusDim && !explicitUsdRequest) {
       valueKey = [{ id: 'audit_ledger.mandate_id', aggregation: 'count' }];
-      metricLabel = 'Total Transacciones';
+      metricLabel = 'Total Transactions';
     } else {
       valueKey = [
         { id: 'audit_ledger.settled_usd', aggregation: 'sum' },
@@ -325,7 +336,7 @@ function parseChartRequest(
     isChartRequest,
     widgetType,
     widgetId,
-    title: `Distribución por ${categoryLabel}: ${metricLabel}`,
+    title: `Distribution by ${categoryLabel}: ${metricLabel}`,
     categoryKey: [{ id: categoryField }],
     valueKey,
     xTrack: 0,

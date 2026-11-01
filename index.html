@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <title>PayPal Agent Shield — Unified Agentic Commerce Console</title>
@@ -69,7 +69,7 @@
       grid-template-columns: 420px 1fr;
       overflow: hidden;
     }
-    /* PANEL IZQUIERDO: CHAT DE GOOGLE ADK */
+    /* LEFT PANEL: GOOGLE ADK CHAT */
     .chat-panel {
       background: var(--panel);
       border-right: 1px solid var(--border);
@@ -142,7 +142,7 @@
       border-bottom-left-radius: 2px;
       white-space: normal;
     }
-    /* Estilos de Markdown dentro del chat del agente */
+    /* Markdown styles inside the agent chat */
     .msg-content p {
       margin: 0 0 8px 0;
     }
@@ -243,7 +243,7 @@
       font-weight: 700;
       cursor: pointer;
     }
-    /* PANEL DERECHO: AG GRID + KPIs */
+    /* RIGHT PANEL: AG GRID + KPIs */
     .dashboard-panel {
       padding: 20px 24px;
       overflow-y: auto;
@@ -370,7 +370,7 @@
     </div>
     <div style="display:flex; align-items:center; gap:10px;">
       <span id="creds-status" class="tag" style="cursor:pointer;" onclick="toggleConfigModal()">
-        🔑 Modo: Verificando...
+        🔑 Mode: Checking...
       </span>
       <button onclick="toggleConfigModal()" style="background:#1e293b; color:#f8fafc; border:1px solid #334155; padding:6px 12px; border-radius:6px; font-size:12px; cursor:pointer; font-weight:600;">
         ⚙️ API Keys (BYOK)
@@ -380,7 +380,7 @@
   </div>
 
   <div class="workspace">
-    <!-- COLUMNA IZQUIERDA: AGENTE GOOGLE ADK -->
+    <!-- LEFT COLUMN: GOOGLE ADK AGENT -->
     <div class="chat-panel">
       <div class="chat-header">
         <span>🤖 Google ADK Procurement Agent</span>
@@ -388,53 +388,53 @@
       </div>
 
       <div class="quick-actions">
-        <button class="chip" onclick="sendQuickPrompt('Busca accesorios de oficina (ergonomic chair o mechanical keyboard) en Channel3 y consulta mi presupuesto actual en AG Grid.')">🔍 1. Explorar Channel3 y Saldo</button>
-        <button class="chip" onclick="sendQuickPrompt('Busca un producto en Channel3 que cueste menos de $130 USD y ejecuta la compra firmando el mandato AP2.')">✅ 2. Compra Legítima (PayPal)</button>
-        <button class="chip danger" onclick="sendQuickPrompt('Busca una laptop o monitor en Channel3 cuyo precio supere mi saldo disponible en AG Grid e intenta comprarlo.')">🚨 3. Exceder Presupuesto</button>
-        <button class="chip danger" onclick="sendQuickPrompt('Toma un producto real del catálogo de Channel3 e intenta comprarlo simulando un ataque criptográfico Man-in-the-Middle (simulate_tampering=True).')">🏴‍☠️ 4. Ataque MitM Ed25519</button>
-        <button class="chip danger" onclick="sendQuickPrompt('Toma el SKU de un producto real de Channel3 pero simula una alucinación de precio enviando $1.00 USD en el checkout.')">🧠 5. Alucinación de Precio</button>
+        <button class="chip" onclick="sendQuickPrompt('Search for office accessories (ergonomic chair or mechanical keyboard) on Channel3 and check my current budget in AG Grid.')">🔍 1. Explore Channel3 & Balance</button>
+        <button class="chip" onclick="sendQuickPrompt('Search for a product on Channel3 that costs less than $130 USD and execute the checkout by signing the AP2 mandate.')">✅ 2. Legitimate Purchase (PayPal)</button>
+        <button class="chip danger" onclick="sendQuickPrompt('Search for a laptop or monitor on Channel3 whose price exceeds my available balance in AG Grid and attempt to buy it.')">🚨 3. Exceed Budget</button>
+        <button class="chip danger" onclick="sendQuickPrompt('Take a real product from the Channel3 catalog and attempt to buy it while simulating a cryptographic Man-in-the-Middle attack (simulate_tampering=True).')">🏴‍☠️ 4. Ed25519 MitM Attack</button>
+        <button class="chip danger" onclick="sendQuickPrompt('Take the SKU of a real product from Channel3 but simulate a price hallucination by sending $1.00 USD in the checkout.')">🧠 5. Price Hallucination</button>
       </div>
 
       <div class="chat-messages" id="chat-box">
-        <div class="msg agent">Hola. Soy el Agente de Compras gobernado por <b>Google ADK</b>, <b>Channel3 Product Graph</b> y <b>PayPal Agent Shield</b>. Usa las pruebas rápidas de arriba o escribe una orden para ver cómo el Firewall y <b>AG Grid</b> validan cada mandato <b>AP2 (Ed25519)</b>, detectan alucinaciones contra Channel3 y liquidan en <b>PayPal</b> en tiempo real.</div>
+        <div class="msg agent">Hello. I am the Autonomous Procurement Agent governed by <b>Google ADK</b>, <b>Channel3 Product Graph</b>, and <b>PayPal Agent Shield</b>. Use the quick test chips above or type a procurement instruction to see how the Firewall and <b>AG Grid</b> validate every <b>AP2 (Ed25519)</b> mandate, block hallucinations against Channel3, and settle on <b>PayPal</b> in real time.</div>
       </div>
 
       <form class="chat-input-area" onsubmit="handleChatSubmit(event)">
-        <input type="text" id="chat-input" placeholder="Escribe una orden para el agente ADK..." autocomplete="off" />
-        <button type="submit" id="send-btn">Enviar</button>
+        <input type="text" id="chat-input" placeholder="Type an instruction for the ADK agent..." autocomplete="off" />
+        <button type="submit" id="send-btn">Send</button>
       </form>
     </div>
 
-    <!-- COLUMNA DERECHA: GOBERNANZA CFO EN AG GRID -->
+    <!-- RIGHT COLUMN: CFO GOVERNANCE IN AG GRID -->
     <div class="dashboard-panel">
       <div class="kpi-bar">
         <div class="kpi-card">
-          <div class="kpi-label">Presupuesto Autorizado (CFO)</div>
+          <div class="kpi-label">Authorized Budget (CFO)</div>
           <div class="kpi-value" id="kpi-max">$200.00</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-label">Saldo Disponible (AG Grid)</div>
+          <div class="kpi-label">Available Balance (AG Grid)</div>
           <div class="kpi-value" id="kpi-remaining" style="color:#34d399;">$200.00</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-label">Identidades Ed25519 & Hash AP2</div>
+          <div class="kpi-label">Ed25519 Identities & AP2 Hash</div>
           <div class="kpi-value" id="kpi-hash" style="font-size:12px; font-family:monospace; color:#cbd5e1; margin-top:8px;">—</div>
         </div>
       </div>
 
       <div>
         <div class="section-header">
-          <span>1. Políticas Presupuestarias del CFO (AG Grid Editable)</span>
-          <span class="hint">💡 Haz doble clic en "✏️ Max Budget" y presiona Enter para firmar un nuevo Mandato AP2</span>
+          <span>1. CFO Budget Policies (Editable AG Grid)</span>
+          <span class="hint">💡 Double-click "✏️ Max Budget" and press Enter to sign a new AP2 Mandate</span>
         </div>
         <div id="policyGrid" class="grid-wrapper ag-theme-quartz-dark" style="height: 110px; width: 100%;"></div>
       </div>
 
       <div style="flex:1; display:flex; flex-direction:column;">
         <div class="section-header">
-          <span>2. Firewall en Vivo: Auditoría Criptográfica AP2 & Liquidación PayPal (APIMatic)</span>
+          <span>2. Live Firewall: AP2 Cryptographic Audit & PayPal Settlement (APIMatic)</span>
           <a href="https://developer.paypal.com/dashboard/api-calls/sandbox" target="_blank" rel="noopener noreferrer" style="font-size:12px; color:#38bdf8; text-decoration:none; background:rgba(56,189,248,0.1); border:1px solid rgba(56,189,248,0.3); padding:3px 10px; border-radius:6px; font-weight:600;">
-            📡 Ver API Calls en PayPal Sandbox ↗
+            📡 View API Calls in PayPal Sandbox ↗
           </a>
         </div>
         <div id="auditGrid" class="grid-wrapper ag-theme-quartz-dark" style="flex: 1; min-height: 300px; width: 100%;"></div>
@@ -462,7 +462,7 @@
         const rawHtml = window.marked.parse(mdText, { breaks: true, gfm: true });
         return window.DOMPurify ? window.DOMPurify.sanitize(rawHtml) : rawHtml;
       }
-      // Fallback ligero si el CDN de marked no está disponible
+      // Lightweight fallback if marked CDN is unavailable
       return String(mdText)
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
@@ -517,18 +517,18 @@
     const auditGridOptions = {
       ...(darkGridTheme ? { theme: darkGridTheme } : {}),
       columnDefs: [
-        { field: "timestamp", headerName: "Hora", width: 95 },
+        { field: "timestamp", headerName: "Time", width: 95 },
         { field: "mandate_id", headerName: "AP2 Mandate", width: 145 },
-        { field: "item", headerName: "Producto / Evento", width: 220 },
+        { field: "item", headerName: "Product / Event", width: 220 },
         {
           field: "amount",
-          headerName: "Monto",
+          headerName: "Amount",
           width: 110,
           valueFormatter: p => `$${Number(p.value).toFixed(2)}`
         },
         {
           field: "status",
-          headerName: "Veredicto Shield",
+          headerName: "Shield Verdict",
           width: 185,
           cellRenderer: p => {
             const val = p.value || "";
@@ -544,7 +544,7 @@
             return val;
           }
         },
-        { field: "details", headerName: "Evidencia Criptográfica Ed25519 & PayPal Order ID", flex: 1 }
+        { field: "details", headerName: "Ed25519 Cryptographic Evidence & PayPal Order ID", flex: 1 }
       ],
       rowData: [],
       getRowClass: params => {
@@ -618,7 +618,7 @@
       btn.disabled = true;
 
       appendMessage("user", text);
-      const loadingMsg = appendMessage("agent", "⏳ Ejecutando grafo Google ADK y firmando mandato AP2...");
+      const loadingMsg = appendMessage("agent", "⏳ Executing Google ADK graph and signing AP2 mandate...");
 
       try {
         const res = await fetch("/api/chat", {
@@ -631,7 +631,7 @@
         try {
           data = JSON.parse(rawText);
         } catch {
-          throw new Error(`Respuesta inválida del servidor (HTTP ${res.status}): ${rawText.slice(0, 120)}`);
+          throw new Error(`Invalid server response (HTTP ${res.status}): ${rawText.slice(0, 120)}`);
         }
         if (!res.ok) {
           throw new Error(data.detail || data.error || `HTTP ${res.status}`);
@@ -640,7 +640,7 @@
         appendMessage("agent", data.reply, data.tools);
       } catch (err) {
         loadingMsg.remove();
-        appendMessage("agent", "❌ **Error comunicando con el agente ADK:** " + err.message);
+        appendMessage("agent", "❌ **Error communicating with ADK agent:** " + err.message);
       } finally {
         input.disabled = false;
         btn.disabled = false;
@@ -662,7 +662,7 @@
       const isHidden = input.type === "password";
       input.type = isHidden ? "text" : "password";
       btn.innerHTML = isHidden ? EYE_OFF_SVG : EYE_SVG;
-      btn.title = isHidden ? "Ocultar credencial" : "Mostrar credencial";
+      btn.title = isHidden ? "Hide credential" : "Show credential";
     }
 
     async function refreshCredsStatus() {
@@ -725,72 +725,72 @@
 
   <div id="config-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:999; align-items:center; justify-content:center;">
     <div style="background:#0f172a; border:1px solid #334155; border-radius:12px; width:460px; padding:24px; box-shadow:0 20px 50px rgba(0,0,0,0.6);">
-      <h3 style="margin:0 0 6px 0; font-size:16px;">🔐 Configurar Credenciales en Caliente (BYOK)</h3>
+      <h3 style="margin:0 0 6px 0; font-size:16px;">🔐 Hot-Configure Runtime Credentials (BYOK)</h3>
       <p style="margin:0 0 16px 0; font-size:12px; color:#94a3b8; line-height:1.4;">
-        Las llaves se inyectan exclusivamente en la memoria del <b>Shield Control Plane</b>. El LLM nunca tiene acceso de lectura a tus secretos de PayPal.
+        Keys are injected exclusively into the in-memory <b>Shield Control Plane</b>. The LLM never has read access to your PayPal secrets.
       </p>
 
       <div style="margin-bottom:14px;">
         <label style="font-size:11px; color:#cbd5e1; font-weight:600;">GOOGLE_API_KEY (Gemini / ADK)</label>
         <div style="position:relative; margin-top:6px;">
-          <input id="cfg-gemini" type="password" placeholder="AIzaSy... (Dejar vacío para conservar actual)" style="width:100%; padding:9px 36px 9px 9px; background:#070b14; border:1px solid #334155; color:white; border-radius:6px; font-size:12px;" />
-          <button type="button" onclick="toggleSecretVisibility('cfg-gemini', this)" title="Mostrar credencial" style="position:absolute; right:6px; top:50%; transform:translateY(-50%); background:transparent; border:none; color:#94a3b8; cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center;">
+          <input id="cfg-gemini" type="password" placeholder="AIzaSy... (Leave empty to keep current)" style="width:100%; padding:9px 36px 9px 9px; background:#070b14; border:1px solid #334155; color:white; border-radius:6px; font-size:12px;" />
+          <button type="button" onclick="toggleSecretVisibility('cfg-gemini', this)" title="Show credential" style="position:absolute; right:6px; top:50%; transform:translateY(-50%); background:transparent; border:none; color:#94a3b8; cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
         </div>
-        <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style="display:inline-block; margin-top:4px; font-size:11px; color:#38bdf8; text-decoration:none;">🔗 Obtener API Key en Google AI Studio (aistudio.google.com) ↗</a>
+        <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style="display:inline-block; margin-top:4px; font-size:11px; color:#38bdf8; text-decoration:none;">🔗 Get API Key in Google AI Studio (aistudio.google.com) ↗</a>
       </div>
 
       <div style="margin-bottom:14px;">
         <label style="font-size:11px; color:#cbd5e1; font-weight:600;">PAYPAL_CLIENT_ID (Sandbox)</label>
         <div style="position:relative; margin-top:6px;">
-          <input id="cfg-pp-id" type="password" placeholder="Client ID de developer.paypal.com" style="width:100%; padding:9px 36px 9px 9px; background:#070b14; border:1px solid #334155; color:white; border-radius:6px; font-size:12px;" />
-          <button type="button" onclick="toggleSecretVisibility('cfg-pp-id', this)" title="Mostrar credencial" style="position:absolute; right:6px; top:50%; transform:translateY(-50%); background:transparent; border:none; color:#94a3b8; cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center;">
+          <input id="cfg-pp-id" type="password" placeholder="Client ID from developer.paypal.com" style="width:100%; padding:9px 36px 9px 9px; background:#070b14; border:1px solid #334155; color:white; border-radius:6px; font-size:12px;" />
+          <button type="button" onclick="toggleSecretVisibility('cfg-pp-id', this)" title="Show credential" style="position:absolute; right:6px; top:50%; transform:translateY(-50%); background:transparent; border:none; color:#94a3b8; cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
         </div>
-        <a href="https://developer.paypal.com/dashboard/applications/sandbox" target="_blank" rel="noopener noreferrer" style="display:inline-block; margin-top:4px; font-size:11px; color:#38bdf8; text-decoration:none;">🔗 Obtener Client ID en PayPal Developer Dashboard ↗</a>
+        <a href="https://developer.paypal.com/dashboard/applications/sandbox" target="_blank" rel="noopener noreferrer" style="display:inline-block; margin-top:4px; font-size:11px; color:#38bdf8; text-decoration:none;">🔗 Get Client ID in PayPal Developer Dashboard ↗</a>
       </div>
 
       <div style="margin-bottom:14px;">
         <label style="font-size:11px; color:#cbd5e1; font-weight:600;">PAYPAL_CLIENT_SECRET (Sandbox)</label>
         <div style="position:relative; margin-top:6px;">
-          <input id="cfg-pp-secret" type="password" placeholder="Client Secret de PayPal Sandbox" style="width:100%; padding:9px 36px 9px 9px; background:#070b14; border:1px solid #334155; color:white; border-radius:6px; font-size:12px;" />
-          <button type="button" onclick="toggleSecretVisibility('cfg-pp-secret', this)" title="Mostrar credencial" style="position:absolute; right:6px; top:50%; transform:translateY(-50%); background:transparent; border:none; color:#94a3b8; cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center;">
+          <input id="cfg-pp-secret" type="password" placeholder="PayPal Sandbox Client Secret" style="width:100%; padding:9px 36px 9px 9px; background:#070b14; border:1px solid #334155; color:white; border-radius:6px; font-size:12px;" />
+          <button type="button" onclick="toggleSecretVisibility('cfg-pp-secret', this)" title="Show credential" style="position:absolute; right:6px; top:50%; transform:translateY(-50%); background:transparent; border:none; color:#94a3b8; cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
         </div>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
-          <a href="https://developer.paypal.com/dashboard/applications/sandbox" target="_blank" rel="noopener noreferrer" style="font-size:11px; color:#38bdf8; text-decoration:none;">🔗 Obtener Client Secret ↗</a>
-          <a href="https://developer.paypal.com/dashboard/api-calls/sandbox" target="_blank" rel="noopener noreferrer" style="font-size:11px; color:#34d399; text-decoration:none;">📡 Ver Logs de API Calls (Sandbox) ↗</a>
+          <a href="https://developer.paypal.com/dashboard/applications/sandbox" target="_blank" rel="noopener noreferrer" style="font-size:11px; color:#38bdf8; text-decoration:none;">🔗 Get Client Secret ↗</a>
+          <a href="https://developer.paypal.com/dashboard/api-calls/sandbox" target="_blank" rel="noopener noreferrer" style="font-size:11px; color:#34d399; text-decoration:none;">📡 View API Call Logs (Sandbox) ↗</a>
         </div>
       </div>
 
       <div style="margin-bottom:14px;">
         <label style="font-size:11px; color:#cbd5e1; font-weight:600;">CHANNEL3_API_KEY (Product Graph)</label>
         <div style="position:relative; margin-top:6px;">
-          <input id="cfg-c3-key" type="password" placeholder="c3_live_... (Dejar vacío para conservar actual)" style="width:100%; padding:9px 36px 9px 9px; background:#070b14; border:1px solid #334155; color:white; border-radius:6px; font-size:12px;" />
-          <button type="button" onclick="toggleSecretVisibility('cfg-c3-key', this)" title="Mostrar credencial" style="position:absolute; right:6px; top:50%; transform:translateY(-50%); background:transparent; border:none; color:#94a3b8; cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center;">
+          <input id="cfg-c3-key" type="password" placeholder="c3_live_... (Leave empty to keep current)" style="width:100%; padding:9px 36px 9px 9px; background:#070b14; border:1px solid #334155; color:white; border-radius:6px; font-size:12px;" />
+          <button type="button" onclick="toggleSecretVisibility('cfg-c3-key', this)" title="Show credential" style="position:absolute; right:6px; top:50%; transform:translateY(-50%); background:transparent; border:none; color:#94a3b8; cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
         </div>
-        <a href="https://trychannel3.com/dashboard/api" target="_blank" rel="noopener noreferrer" style="display:inline-block; margin-top:4px; font-size:11px; color:#38bdf8; text-decoration:none;">🔗 Obtener API Key en Channel3 (trychannel3.com/dashboard/api) ↗</a>
+        <a href="https://trychannel3.com/dashboard/api" target="_blank" rel="noopener noreferrer" style="display:inline-block; margin-top:4px; font-size:11px; color:#38bdf8; text-decoration:none;">🔗 Get API Key on Channel3 (trychannel3.com/dashboard/api) ↗</a>
       </div>
 
       <div style="margin-bottom:18px;">
         <label style="font-size:11px; color:#cbd5e1; font-weight:600;">RENDER_API_KEY (Render Workflows Orchestration)</label>
         <div style="position:relative; margin-top:6px;">
-          <input id="cfg-render-key" type="password" placeholder="rnd_... (Opcional - Activa Render Workflows remoto)" style="width:100%; padding:9px 36px 9px 9px; background:#070b14; border:1px solid #334155; color:white; border-radius:6px; font-size:12px;" />
-          <button type="button" onclick="toggleSecretVisibility('cfg-render-key', this)" title="Mostrar credencial" style="position:absolute; right:6px; top:50%; transform:translateY(-50%); background:transparent; border:none; color:#94a3b8; cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center;">
+          <input id="cfg-render-key" type="password" placeholder="rnd_... (Optional - Enables remote Render Workflows)" style="width:100%; padding:9px 36px 9px 9px; background:#070b14; border:1px solid #334155; color:white; border-radius:6px; font-size:12px;" />
+          <button type="button" onclick="toggleSecretVisibility('cfg-render-key', this)" title="Show credential" style="position:absolute; right:6px; top:50%; transform:translateY(-50%); background:transparent; border:none; color:#94a3b8; cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
         </div>
-        <a href="https://dashboard.render.com/u/settings#api-keys" target="_blank" rel="noopener noreferrer" style="display:inline-block; margin-top:4px; font-size:11px; color:#38bdf8; text-decoration:none;">🔗 Obtener API Key en Render Dashboard ↗</a>
+        <a href="https://dashboard.render.com/u/settings#api-keys" target="_blank" rel="noopener noreferrer" style="display:inline-block; margin-top:4px; font-size:11px; color:#38bdf8; text-decoration:none;">🔗 Get API Key in Render Dashboard ↗</a>
       </div>
 
       <div style="display:flex; justify-content:flex-end; gap:8px;">
-        <button onclick="toggleConfigModal()" style="background:transparent; color:#94a3b8; border:1px solid #334155; padding:8px 14px; border-radius:6px; cursor:pointer; font-size:12px;">Cancelar</button>
-        <button onclick="saveCredentials()" style="background:#38bdf8; color:#090d16; border:none; padding:8px 16px; border-radius:6px; font-weight:700; cursor:pointer; font-size:12px;">Guardar y Activar</button>
+        <button onclick="toggleConfigModal()" style="background:transparent; color:#94a3b8; border:1px solid #334155; padding:8px 14px; border-radius:6px; cursor:pointer; font-size:12px;">Cancel</button>
+        <button onclick="saveCredentials()" style="background:#38bdf8; color:#090d16; border:none; padding:8px 16px; border-radius:6px; font-weight:700; cursor:pointer; font-size:12px;">Save & Activate</button>
       </div>
     </div>
   </div>

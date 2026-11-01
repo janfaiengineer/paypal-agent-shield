@@ -1,7 +1,7 @@
 [project]
 name = "hackaton-paypal"
 version = "0.1.0"
-description = "Add your description here"
+description = "PayPal Agent Shield — Cryptographic AP2 Governance, Anti-Hallucination & HITL Firewall for Agentic Commerce"
 readme = "README.md"
 authors = [
     { name = "janfaiengineer", email = "janf.ai.engineer@gmail.com" }

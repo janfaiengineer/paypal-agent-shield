@@ -33,7 +33,7 @@ try:
 except ImportError:
     RenderAsync = None
 
-# Carga variables de entorno (.env) para Google ADK (GOOGLE_API_KEY) y PayPal
+# Load environment variables (.env) for Google ADK (GOOGLE_API_KEY) and PayPal
 load_dotenv()
 
 from google.adk.runners import Runner
@@ -67,7 +67,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- RUNTIME NATIVO DE GOOGLE ADK ---
+# --- GOOGLE ADK NATIVE RUNTIME ---
 APP_NAME = "paypal_agent_shield_app"
 USER_ID = "cfo_executive"
 session_service = InMemorySessionService()
@@ -77,7 +77,7 @@ adk_runner = Runner(
     session_service=session_service,
 )
 
-# --- CATÁLOGO DE VERDAD (GROUND-TRUTH) PARA PREVENIR ALUCINACIONES ---
+# --- GROUND-TRUTH CATALOG TO PREVENT HALLUCINATIONS ---
 TRUSTED_CATALOG = {
     "CHAIR-ERG-01": {"price": 120.00, "paypal_email": "office-supply@sandbox.paypal.com"},
     "KEYB-MECH-02": {"price": 65.00, "paypal_email": "peripherals@sandbox.paypal.com"},
@@ -148,7 +148,7 @@ state = {
             "amount": 200.00,
             "merchant": "office-supply@sandbox.paypal.com",
             "status": "POLICY_SIGNED",
-            "details": f"Política Ed25519 firmada por CFO ($200.00 máx) | Sig: {_init_sig[:20]}...",
+            "details": f"Ed25519 Policy signed by CFO ($200.00 max) | Sig: {_init_sig[:20]}...",
         },
         {
             "timestamp": datetime.now().strftime("%H:%M:%S"),
@@ -166,7 +166,7 @@ state = {
             "amount": 799.00,
             "merchant": "monitors-direct@sandbox.paypal.com",
             "status": "QUARANTINED_HITL",
-            "details": "BUDGET_EXCEEDED_HITL: Pausado en nodo ADK adk_node_cfo_hitl_quarantine ($799.00 > $80.00 saldo CFO).",
+            "details": "BUDGET_EXCEEDED_HITL: Paused at ADK node adk_node_cfo_hitl_quarantine ($799.00 > $80.00 CFO balance).",
         },
         {
             "timestamp": datetime.now().strftime("%H:%M:%S"),
@@ -175,7 +175,7 @@ state = {
             "amount": 950.00,
             "merchant": "hacker@darkweb.io",
             "status": "BLOCKED_BY_SHIELD",
-            "details": "GROUND_TRUTH_MISMATCH & ED25519_TAMPERED: Interceptado por Firewall Criptográfico AP2 antes de PayPal Sandbox.",
+            "details": "GROUND_TRUTH_MISMATCH & ED25519_TAMPERED: Intercepted by AP2 Cryptographic Firewall prior to PayPal Sandbox.",
         },
     ],
     "taskboard_cards": [
@@ -196,8 +196,8 @@ state = {
             "gate_code": "GROUND_TRUTH_SYNCED",
             "ed25519_sig": _init_sig[:18] + "...",
             "badge": "100M+ Product Graph",
-            "details": "Precios y SKUs verificados contra alucinaciones del LLM.",
-            "description": "Precios y SKUs verificados contra alucinaciones del LLM.",
+            "details": "Prices and SKUs verified against LLM hallucinations.",
+            "description": "Prices and SKUs verified against LLM hallucinations.",
             "timestamp": datetime.now().strftime("%H:%M:%S"),
             "updated_at": datetime.now().strftime("%H:%M:%S"),
             "hitl_quarantined": False,
@@ -226,8 +226,8 @@ state = {
             "gate_code": "BUDGET_EXCEEDED_HITL",
             "ed25519_sig": _init_sig[:18] + "...",
             "badge": "⏳ HITL: Drag to Settle (+$719.00)",
-            "details": "Pausado en nodo ADK `adk_node_cfo_hitl_quarantine`. Arrastra a 'PayPal Sandbox Settled' para auto-firmar Ed25519 y liquidar.",
-            "description": "Pausado en nodo ADK adk_node_cfo_hitl_quarantine ($799.00 > $80.00 saldo AG Grid).",
+            "details": "Paused at ADK node `adk_node_cfo_hitl_quarantine`. Drag to 'PayPal Sandbox Settled' to auto-sign Ed25519 and settle.",
+            "description": "Paused at ADK node adk_node_cfo_hitl_quarantine ($799.00 > $80.00 AG Grid balance).",
             "timestamp": datetime.now().strftime("%H:%M:%S"),
             "updated_at": datetime.now().strftime("%H:%M:%S"),
             "hitl_quarantined": True,
@@ -257,8 +257,8 @@ state = {
             "paypal_tx_id": "PAYPAL-SANDBOX-88A1",
             "paypal_order_id": "PAYPAL-SANDBOX-88A1",
             "badge": "✅ PayPal: PAYPAL-SANDBOX-88A1",
-            "details": "Liquidado en PayPal (SANDBOX_SIMULATED) | Channel3 Ground-Truth ($120.00)",
-            "description": "Liquidado en PayPal (SANDBOX_SIMULATED) | Channel3 Ground-Truth ($120.00)",
+            "details": "Settled on PayPal (SANDBOX_SIMULATED) | Channel3 Ground-Truth ($120.00)",
+            "description": "Settled on PayPal (SANDBOX_SIMULATED) | Channel3 Ground-Truth ($120.00)",
             "timestamp": datetime.now().strftime("%H:%M:%S"),
             "updated_at": datetime.now().strftime("%H:%M:%S"),
             "hitl_quarantined": False,
@@ -285,8 +285,8 @@ state = {
             "gate_code": "HALLUCINATION_BLOCKED",
             "ed25519_sig": "TAMPERED_MITM_SIG...",
             "badge": "🛑 HALLUCINATION_BLOCKED",
-            "details": "GROUND_TRUTH_MISMATCH & ED25519_TAMPERED: Interceptado por Firewall Criptográfico AP2 antes de PayPal Sandbox.",
-            "description": "GROUND_TRUTH_MISMATCH & ED25519_TAMPERED: Interceptado por Firewall Criptográfico AP2 antes de PayPal Sandbox.",
+            "details": "GROUND_TRUTH_MISMATCH & ED25519_TAMPERED: Intercepted by AP2 Cryptographic Firewall prior to PayPal Sandbox.",
+            "description": "GROUND_TRUTH_MISMATCH & ED25519_TAMPERED: Intercepted by AP2 Cryptographic Firewall prior to PayPal Sandbox.",
             "timestamp": datetime.now().strftime("%H:%M:%S"),
             "updated_at": datetime.now().strftime("%H:%M:%S"),
             "hitl_quarantined": False,
@@ -379,12 +379,12 @@ async def get_state():
 
 def _has_valid_key(env_name: str) -> bool:
     val = os.environ.get(env_name, "").strip()
-    return bool(val) and "tu_api_key" not in val.lower()
+    return bool(val) and "tu_api_key" not in val.lower() and "your_" not in val.lower()
 
 
 @app.get("/api/config/status")
 async def get_config_status():
-    """Devuelve si las llaves ya están activas (sin exponer los secretos al navegador)."""
+    """Returns whether credentials are active (without exposing secrets to the browser)."""
     has_gemini = _has_valid_key("GOOGLE_API_KEY") or _has_valid_key("GEMINI_API_KEY")
     has_channel3 = _has_valid_key("CHANNEL3_API_KEY")
     has_render_wf = _has_valid_key("RENDER_API_KEY") and RenderAsync is not None
@@ -400,7 +400,7 @@ async def get_config_status():
 
 @app.post("/api/config")
 async def update_runtime_config(cfg: CredentialsConfig):
-    """Actualiza en memoria las credenciales de Google ADK, PayPal APIMatic SDK, Channel3 y Render Workflows."""
+    """Updates in-memory credentials for Google ADK, PayPal APIMatic SDK, Channel3, and Render Workflows."""
     if cfg.google_api_key.strip():
         new_key = cfg.google_api_key.strip()
         os.environ["GOOGLE_API_KEY"] = new_key
@@ -455,9 +455,9 @@ async def update_runtime_config(cfg: CredentialsConfig):
 
 def _normalize_and_register_channel3_product(prod) -> dict | None:
     """
-    Extrae los metadatos normalizados del Product Graph de Channel3 (título, precio,
-    disponibilidad, condición, buy_url, variantes, key_features e imagen) y registra
-    su precio y comercio oficial en TRUSTED_CATALOG (Oráculo Anti-Alucinaciones Gate 3).
+    Extracts normalized metadata from the Channel3 Product Graph (title, price,
+    availability, condition, buy_url, variants, key_features, and image) and registers
+    its official price and merchant in TRUSTED_CATALOG (Gate 3 Anti-Hallucination Oracle).
     """
     raw_price = None
     compare_at_price = None
@@ -509,7 +509,7 @@ def _normalize_and_register_channel3_product(prod) -> dict | None:
             if opt_name:
                 variants_summary.append(str(opt_name))
 
-    # CRÍTICO: Registramos la verdad oficial en memoria del Shield (Anti-Alucinación Gate 3)
+    # CRITICAL: Register official ground-truth in Shield memory (Gate 3 Anti-Hallucination)
     TRUSTED_CATALOG[sku] = {
         "price": price_usd,
         "paypal_email": sandbox_payee,
@@ -539,9 +539,9 @@ def _normalize_and_register_channel3_product(prod) -> dict | None:
 @app.get("/api/catalog/search")
 async def search_live_channel3(q: str = "office chair", max_price: float | None = None):
     """
-    Consulta productos reales en Channel3 API (`products.search` con `SearchFilters`)
-    y registra sus precios oficiales, disponibilidad y buy links en TRUSTED_CATALOG
-    para mantener la validación Anti-Alucinaciones del Shield.
+    Queries live products on the Channel3 API (`products.search` with `SearchFilters`)
+    and registers their official prices, availability, and buy links in TRUSTED_CATALOG
+    to enforce the Shield's Anti-Hallucination validation.
     """
     c3_key = os.environ.get("CHANNEL3_API_KEY", "").strip()
 
@@ -563,8 +563,8 @@ async def search_live_channel3(q: str = "office chair", max_price: float | None 
             if max_price is None or float(data["price"]) <= float(max_price)
         ]
 
-    # 1. Si no hay API Key de Channel3 configurada, usa el catálogo semilla de respaldo
-    if not c3_key or "tu_api_key" in c3_key:
+    # 1. If no Channel3 API Key is configured, use the fallback seed catalog
+    if not c3_key or "tu_api_key" in c3_key or "your_" in c3_key.lower():
         fallback_items = _build_fallback_catalog()
         first_price = float(fallback_items[0]["price"]) if fallback_items else 0.0
         ts = now_str()
@@ -585,8 +585,8 @@ async def search_live_channel3(q: str = "office chair", max_price: float | None 
             "gate_code": "GROUND_TRUTH_SYNCED",
             "ed25519_sig": state["policies"]["procurement-01"]["cfo_signature"][:18] + "...",
             "badge": "Ground-Truth Synced",
-            "details": f"Catálogo sincronizado ({len(fallback_items)} SKUs). Anti-alucinación activa.",
-            "description": f"Catálogo sincronizado ({len(fallback_items)} SKUs). Anti-alucinación activa.",
+            "details": f"Catalog synced ({len(fallback_items)} SKUs). Anti-hallucination active.",
+            "description": f"Catalog synced ({len(fallback_items)} SKUs). Anti-hallucination active.",
             "timestamp": ts,
             "updated_at": ts,
             "hitl_quarantined": False,
@@ -595,7 +595,7 @@ async def search_live_channel3(q: str = "office chair", max_price: float | None 
         await broadcast_state()
         return {"mode": "FALLBACK_CATALOG", "products": fallback_items}
 
-    # 2. Búsqueda real en el Product Graph de Channel3 (100M+ productos, 25,000+ retailers)
+    # 2. Live search on the Channel3 Product Graph (100M+ products, 25,000+ retailers)
     try:
         client = AsyncChannel3Client(api_key=c3_key, timeout=15.0)
         search_kwargs = {"query": q, "limit": 5}
@@ -606,7 +606,7 @@ async def search_live_channel3(q: str = "office chair", max_price: float | None 
 
         response = await client.products.search(**search_kwargs)
 
-        # Soporta tanto respuesta directa (.products) como AsyncPager (.items / .response.products)
+        # Supports both direct response (.products) and AsyncPager (.items / .response.products)
         raw_products = getattr(response, "products", None) or getattr(response, "items", None)
         if not raw_products and hasattr(response, "response"):
             raw_products = getattr(response.response, "products", None)
@@ -636,8 +636,8 @@ async def search_live_channel3(q: str = "office chair", max_price: float | None 
                 "gate_code": "GROUND_TRUTH_SYNCED",
                 "ed25519_sig": state["policies"]["procurement-01"]["cfo_signature"][:18] + "...",
                 "badge": "LIVE Channel3 Graph",
-                "details": f"{len(live_products)} productos reales registrados en Ground-Truth ({live_products[0].get('availability', 'InStock')}).",
-                "description": f"{len(live_products)} productos reales registrados en Ground-Truth ({live_products[0].get('availability', 'InStock')}).",
+                "details": f"{len(live_products)} live products registered in Ground-Truth ({live_products[0].get('availability', 'InStock')}).",
+                "description": f"{len(live_products)} live products registered in Ground-Truth ({live_products[0].get('availability', 'InStock')}).",
                 "timestamp": now_str(),
                 "updated_at": now_str(),
                 "hitl_quarantined": False,
@@ -655,12 +655,12 @@ async def search_live_channel3(q: str = "office chair", max_price: float | None 
 @app.get("/api/catalog/enrich/{sku}")
 async def enrich_and_recommend_channel3(sku: str, max_price: float | None = None):
     """
-    Product Enrichment & AI Recommendations con Channel3 (`products.retrieve` + `products.find_similar`):
-    1. Enriquecimiento en vivo de un SKU (`title`, `description`, `key_features`, `availability`, `buy_url`, `variants`).
-    2. Recomendación de productos similares (`find_similar`) opcionalmente filtrados por `max_price` (ej. presupuesto CFO).
+    Product Enrichment & AI Recommendations via Channel3 (`products.retrieve` + `products.find_similar`):
+    1. Live SKU enrichment (`title`, `description`, `key_features`, `availability`, `buy_url`, `variants`).
+    2. Similar product recommendations (`find_similar`) optionally filtered by `max_price` (e.g., CFO budget).
     """
     c3_key = os.environ.get("CHANNEL3_API_KEY", "").strip()
-    if not c3_key or "tu_api_key" in c3_key or AsyncChannel3Client is None:
+    if not c3_key or "tu_api_key" in c3_key or "your_" in c3_key.lower() or AsyncChannel3Client is None:
         item = TRUSTED_CATALOG.get(sku)
         return {
             "mode": "FALLBACK_ENRICHMENT",
@@ -722,7 +722,7 @@ async def update_policy(update: PolicyUpdate):
             status_code=400,
             content={
                 "status": "ERROR",
-                "error": "El presupuesto máximo (max_budget_usd) debe ser un número positivo mayor a $0.00.",
+                "error": "Maximum budget (max_budget_usd) must be a positive number greater than $0.00.",
             },
         )
     pol_id = f"pol_{uuid.uuid4().hex[:6]}"
@@ -765,7 +765,7 @@ async def _settle_mandate_on_paypal(
     merchant_paypal_email: str,
     agent_signature: str,
 ) -> tuple[dict | None, str, str | None]:
-    """Ejecuta la liquidación en PayPal Sandbox vía Render Workflows o APIMatic SDK local."""
+    """Executes settlement on PayPal Sandbox via Render Workflows or local APIMatic SDK."""
     workflow_engine_note = "LOCAL_INLINE"
     pp_settlement = None
 
@@ -822,13 +822,13 @@ async def process_ap2_checkout(req: CheckoutRequest):
                 "authorized": False,
                 "status": "BLOCKED_BY_SHIELD",
                 "code": "UNKNOWN_AGENT_ID",
-                "error": f"AGENT_POLICY_NOT_FOUND: No existe política activa para el agente '{req.agent_id}'.",
+                "error": f"AGENT_POLICY_NOT_FOUND: No active policy found for agent '{req.agent_id}'.",
             },
         )
     expected_hash = enrich_policy_hash(p)
     trusted_item = TRUSTED_CATALOG.get(req.sku)
 
-    # 1. Ejecutar el Grafo Determinista de Google ADK 2.0 (`ap2_zero_trust_checkout_graph`)
+    # 1. Execute Google ADK 2.0 Deterministic Graph (`ap2_zero_trust_checkout_graph`)
     graph_input = {
         "mandate_id": req.mandate_id,
         "agent_id": req.agent_id,
@@ -867,7 +867,7 @@ async def process_ap2_checkout(req: CheckoutRequest):
         "updated_at": now_str(),
     }
 
-    # 2. Si el Grafo ADK enrutó a Cuarentena HITL (`QUARANTINED`) o Amenaza Bloqueada (`BLOCKED_THREAT`)
+    # 2. If the ADK Graph routed to HITL Quarantine (`QUARANTINED`) or Blocked Threat (`BLOCKED_THREAT`)
     if not graph_res.get("authorized"):
         reason = graph_res.get("error", "SHIELD_REJECTED")
         shortfall = graph_res.get("shortfall_usd", 0.0)
@@ -928,7 +928,7 @@ async def process_ap2_checkout(req: CheckoutRequest):
             "remaining_usd": p["remaining_usd"],
         }
 
-    # 3. Liquidar en PayPal Sandbox vía Render Workflows / APIMatic SDK
+    # 3. Settle on PayPal Sandbox via Render Workflows / APIMatic SDK
     pp_settlement, workflow_engine_note, err_reason = await _settle_mandate_on_paypal(
         mandate_id=req.mandate_id,
         agent_id=req.agent_id,
@@ -980,8 +980,8 @@ async def process_ap2_checkout(req: CheckoutRequest):
         "paypal_tx_id": pp_tx_id,
         "paypal_order_id": pp_tx_id,
         "badge": f"✅ PayPal: {pp_tx_id}",
-        "details": f"Liquidado en PayPal ({pp_mode}) | AP2 Proof: {expected_hash[:12]}...",
-        "description": f"Liquidado en PayPal ({pp_mode}) | AP2 Proof: {expected_hash[:12]}...",
+        "details": f"Settled on PayPal ({pp_mode}) | AP2 Proof: {expected_hash[:12]}...",
+        "description": f"Settled on PayPal ({pp_mode}) | AP2 Proof: {expected_hash[:12]}...",
         "timestamp": now_str(),
         "updated_at": now_str(),
         "hitl_quarantined": False,
@@ -1016,8 +1016,8 @@ async def process_ap2_checkout(req: CheckoutRequest):
 @app.post("/api/quarantine/resolve")
 async def resolve_quarantined_mandate(req: QuarantineResolveRequest):
     """
-    Endpoint invocado al arrastrar una tarjeta en Bryntum TaskBoard (Drag & Drop HITL)
-    o mediante la herramienta `resolve_quarantined_mandate_hitl` del agente ADK.
+    Endpoint invoked when dragging a card in Bryntum TaskBoard (Drag & Drop HITL)
+    or via the ADK agent's `resolve_quarantined_mandate_hitl` tool.
     """
     lookup_id = (req.mandate_id or req.card_id).strip()
     target_card = None
@@ -1027,29 +1027,29 @@ async def resolve_quarantined_mandate(req: QuarantineResolveRequest):
             break
 
     if not target_card:
-        return {"status": "ERROR", "reason": f"No se encontró la tarjeta '{lookup_id}' en Bryntum TaskBoard.", "error": f"No se encontró la tarjeta '{lookup_id}' en Bryntum TaskBoard."}
+        return {"status": "ERROR", "reason": f"Card '{lookup_id}' was not found in Bryntum TaskBoard.", "error": f"Card '{lookup_id}' was not found in Bryntum TaskBoard."}
 
     card_status = str(target_card.get("status") or "").upper()
     if card_status == "PAYPAL_SETTLED":
         return {
             "status": "ALREADY_SETTLED",
             "action": "ALREADY_SETTLED",
-            "reason": f"El mandato '{lookup_id}' ya fue liquidado previamente en PayPal Sandbox.",
+            "reason": f"Mandate '{lookup_id}' was already settled on PayPal Sandbox.",
             "card": target_card,
         }
 
     if card_status == "BLOCKED_THREAT" and not target_card.get("hitl_quarantined"):
         return {
             "status": "FORBIDDEN_ZERO_TRUST",
-            "reason": "Zero-Trust Policy: Los ataques criptográficos (MitM) o alucinaciones de precios no pueden aprobarse.",
-            "error": "Zero-Trust Policy: Los ataques criptográficos (MitM) o alucinaciones de precios no pueden aprobarse.",
+            "reason": "Zero-Trust Policy: Cryptographic attacks (MitM) or price hallucinations cannot be approved.",
+            "error": "Zero-Trust Policy: Cryptographic attacks (MitM) or price hallucinations cannot be approved.",
         }
 
     if card_status != "QUARANTINED" and not target_card.get("hitl_quarantined"):
         return {
             "status": "INVALID_CARD_STATE",
-            "reason": f"La tarjeta '{lookup_id}' (estado={card_status}) no es un mandato en cuarentena HITL.",
-            "error": f"La tarjeta '{lookup_id}' (estado={card_status}) no es un mandato en cuarentena HITL.",
+            "reason": f"Card '{lookup_id}' (status={card_status}) is not a mandate in HITL quarantine.",
+            "error": f"Card '{lookup_id}' (status={card_status}) is not a mandate in HITL quarantine.",
         }
 
     p = state["policies"]["procurement-01"]
@@ -1057,11 +1057,11 @@ async def resolve_quarantined_mandate(req: QuarantineResolveRequest):
     if target_col not in ("PAYPAL_SETTLED", "BLOCKED_THREAT"):
         return {
             "status": "ERROR",
-            "reason": f"Columna destino '{target_col}' no válida. Usa 'PAYPAL_SETTLED' o 'BLOCKED_THREAT'.",
-            "error": f"Columna destino '{target_col}' no válida. Usa 'PAYPAL_SETTLED' o 'BLOCKED_THREAT'.",
+            "reason": f"Invalid target column '{target_col}'. Use 'PAYPAL_SETTLED' or 'BLOCKED_THREAT'.",
+            "error": f"Invalid target column '{target_col}'. Use 'PAYPAL_SETTLED' or 'BLOCKED_THREAT'.",
         }
 
-    # Caso A: CFO arrastra la tarjeta a 'BLOCKED_THREAT' (Rechazar compra en cuarentena)
+    # Case A: CFO drags the card to 'BLOCKED_THREAT' (Reject quarantined purchase)
     if target_col == "BLOCKED_THREAT":
         target_card["status"] = "BLOCKED_THREAT"
         target_card["hitl_quarantined"] = False
@@ -1071,8 +1071,8 @@ async def resolve_quarantined_mandate(req: QuarantineResolveRequest):
         target_card["adk_nodes"] = list(target_card.get("adk_nodes", [])) + ["adk_node_threat_sink"]
         target_card["gate_code"] = "CFO_REJECTED_HITL"
         target_card["badge"] = "🛑 CFO Rejected (HITL)"
-        target_card["details"] = "Rechazado manualmente por el CFO en Bryntum TaskBoard."
-        target_card["description"] = "Rechazado manualmente por el CFO en Bryntum TaskBoard."
+        target_card["details"] = "Manually rejected by the CFO in Bryntum TaskBoard."
+        target_card["description"] = "Manually rejected by the CFO in Bryntum TaskBoard."
         target_card["timestamp"] = now_str()
         target_card["updated_at"] = now_str()
 
@@ -1098,22 +1098,22 @@ async def resolve_quarantined_mandate(req: QuarantineResolveRequest):
             "amount": target_card["amount"],
             "merchant": target_card.get("merchant", "sandbox.paypal.com"),
             "status": "BLOCKED_BY_SHIELD",
-            "details": "CFO rechazó el mandato en cuarentena desde Bryntum TaskBoard.",
+            "details": "CFO rejected the quarantined mandate from Bryntum TaskBoard.",
         })
         await broadcast_state()
         return {"status": "OK", "action": "REJECTED_BY_CFO", "card": target_card}
 
-    # Caso B: CFO arrastra la tarjeta de 'QUARANTINED' a 'PAYPAL_SETTLED' (Auto-Re-Sign Ed25519 + Resume ADK Graph + Settle PayPal)
+    # Case B: CFO drags the card from 'QUARANTINED' to 'PAYPAL_SETTLED' (Auto-Re-Sign Ed25519 + Resume ADK Graph + Settle PayPal)
     amount = float(target_card["amount"])
     sku = target_card["sku"]
     product_name = target_card["name"]
     merchant_email = target_card["merchant"]
 
-    # Asegurar que el SKU esté en TRUSTED_CATALOG por si es la tarjeta demo inicial
+    # Ensure the SKU is in TRUSTED_CATALOG in case it is the initial demo card
     if sku not in TRUSTED_CATALOG:
         TRUSTED_CATALOG[sku] = {"price": amount, "paypal_email": merchant_email}
 
-    # 1. Calcular el nuevo presupuesto para cubrir la orden y pre-firmar con la llave privada Ed25519 del CFO
+    # 1. Compute new budget to cover the order and pre-sign with the CFO's Ed25519 private key
     shortfall = max(0.0, round(amount - p["remaining_usd"], 2))
     new_max_budget = round(p["max_budget_usd"] + shortfall + 50.0, 2) if shortfall > 0 else p["max_budget_usd"]
     new_remaining_before_charge = round(p["remaining_usd"] + shortfall + 50.0, 2) if shortfall > 0 else p["remaining_usd"]
@@ -1123,7 +1123,7 @@ async def resolve_quarantined_mandate(req: QuarantineResolveRequest):
         new_pol_id, p["agent_id"], new_max_budget, p["allowed_category"], new_cfo_sig
     )
 
-    # 2. Re-firmar el mandato de checkout con el nuevo Policy Hash y reanudar el Grafo ADK 2.0
+    # 2. Re-sign the checkout mandate with the new Policy Hash and resume the ADK 2.0 Graph
     resumed_agent_sig = sign_agent_checkout(
         mandate_id=target_card["mandate_id"],
         agent_id=p["agent_id"],
@@ -1158,7 +1158,7 @@ async def resolve_quarantined_mandate(req: QuarantineResolveRequest):
         await broadcast_state()
         return {"status": "ERROR", "error": graph_res.get("error", "ADK_GRAPH_REJECTED")}
 
-    # 3. Liquidar en PayPal Sandbox vía Render Workflows / APIMatic SDK
+    # 3. Settle on PayPal Sandbox via Render Workflows / APIMatic SDK
     pp_settlement, workflow_engine_note, err_reason = await _settle_mandate_on_paypal(
         mandate_id=target_card["mandate_id"],
         agent_id=p["agent_id"],
@@ -1173,7 +1173,7 @@ async def resolve_quarantined_mandate(req: QuarantineResolveRequest):
         await broadcast_state()
         return {"status": "ERROR", "error": err_reason or "PAYPAL_SETTLEMENT_ERROR"}
 
-    # Confirmar actualización de política y descontar el cargo ya liquidado
+    # Confirm policy update and deduct the settled charge
     p["policy_id"] = new_pol_id
     p["max_budget_usd"] = new_max_budget
     p["remaining_usd"] = round(new_remaining_before_charge - amount, 2)
@@ -1208,8 +1208,8 @@ async def resolve_quarantined_mandate(req: QuarantineResolveRequest):
     target_card["paypal_tx_id"] = pp_tx_id
     target_card["paypal_order_id"] = pp_tx_id
     target_card["badge"] = f"✅ HITL Settled: {pp_tx_id}"
-    target_card["details"] = f"Aprobado en Bryntum y liquidado en PayPal ({pp_mode}) | AP2: {new_policy_hash[:12]}..."
-    target_card["description"] = f"Aprobado en Bryntum y liquidado en PayPal ({pp_mode}) | AP2: {new_policy_hash[:12]}..."
+    target_card["details"] = f"Approved in Bryntum and settled on PayPal ({pp_mode}) | AP2: {new_policy_hash[:12]}..."
+    target_card["description"] = f"Approved in Bryntum and settled on PayPal ({pp_mode}) | AP2: {new_policy_hash[:12]}..."
     target_card["timestamp"] = now_str()
     target_card["updated_at"] = now_str()
 
@@ -1251,16 +1251,16 @@ async def resolve_quarantined_mandate(req: QuarantineResolveRequest):
 
 @app.post("/api/chat")
 async def chat_endpoint(req: ChatRequest, request: Request):
-    """Ejecuta el agente de Google ADK y devuelve los trazos de herramientas + respuesta."""
+    """Executes the Google ADK agent and returns tool traces + response."""
     if request.url.port:
         os.environ["SHIELD_RUNTIME_PORT"] = str(request.url.port)
 
     if not (_has_valid_key("GOOGLE_API_KEY") or _has_valid_key("GEMINI_API_KEY")):
         return {
             "reply": (
-                "🔑 **API Key de Gemini no configurada**\n\n"
-                "No se encontró una `GOOGLE_API_KEY` activa. Haz clic en el botón **🔑 API Keys** "
-                "en la barra superior para ingresarla en caliente o agrégala en tu archivo `.env`."
+                "🔑 **Gemini API Key not configured**\n\n"
+                "No active `GOOGLE_API_KEY` was found. Click the **⚙️ API Keys (BYOK)** "
+                "button in the top bar to hot-load your key in memory or add it to your `.env` file."
             ),
             "tools": [],
         }
@@ -1295,10 +1295,10 @@ async def chat_endpoint(req: ChatRequest, request: Request):
         ):
             return {
                 "reply": (
-                    "⚠️ **Límite de tokens / cuota de Gemini alcanzado (HTTP 429)**\n\n"
-                    "Se ha excedido el límite de peticiones o tokens por minuto de tu cuenta de Google Gemini API. "
-                    "Por favor espera unos segundos antes de enviar otro mensaje o cambia tu `GOOGLE_API_KEY` en **🔑 API Keys**.\n\n"
-                    f"`Detalle: {err_str}`"
+                    "⚠️ **Gemini API token / quota limit reached (HTTP 429)**\n\n"
+                    "The requests-per-minute or token quota for your Google Gemini API account has been exceeded. "
+                    "Please wait a few seconds before sending another message or update your `GOOGLE_API_KEY` in **⚙️ API Keys (BYOK)**.\n\n"
+                    f"`Detail: {err_str}`"
                 ),
                 "tools": tools_called,
             }
@@ -1309,21 +1309,21 @@ async def chat_endpoint(req: ChatRequest, request: Request):
         ):
             return {
                 "reply": (
-                    "🔑 **API Key de Gemini inválida o sin permisos**\n\n"
-                    "La llave `GOOGLE_API_KEY` configurada fue rechazada por Google Gemini API. "
-                    "Verifica o actualiza tu llave desde el botón **🔑 API Keys**.\n\n"
-                    f"`Detalle: {err_str}`"
+                    "🔑 **Invalid or unauthorized Gemini API Key**\n\n"
+                    "The configured `GOOGLE_API_KEY` was rejected by the Google Gemini API. "
+                    "Please verify or update your key via the **⚙️ API Keys (BYOK)** button.\n\n"
+                    f"`Detail: {err_str}`"
                 ),
                 "tools": tools_called,
             }
 
         return {
-            "reply": f"❌ **Error ejecutando el agente ADK:**\n\n`{err_str}`",
+            "reply": f"❌ **Error executing ADK agent:**\n\n`{err_str}`",
             "tools": tools_called,
         }
 
     return {
-        "reply": final_reply or "Operación procesada.",
+        "reply": final_reply or "Operation processed.",
         "tools": tools_called
     }
 
@@ -1356,11 +1356,11 @@ def _parse_studio_chart_request(
 @app.post("/api/studio/ai/responses")
 async def studio_ai_responses(request: Request):
     """
-    Endpoint del AG Studio Agent Framework (`AgLlmAdapter` -> `/api/studio/ai/responses`).
-    Delega la ejecución al agente dedicado de Google ADK (`ap2_shield_agent/studio_agent.py`),
-    que opera con `Agent`, `Runner`, `InMemorySessionService` y `AgStudioClientTool(is_long_running=True)`
-    para impulsar tanto al agente `ap2-shield-auditor` como a los sub-agentes especialistas de AG Studio
-    (`lead`, `data`, `widget`, `page`, `planning`) con respaldo determinista automático.
+    AG Studio Agent Framework endpoint (`AgLlmAdapter` -> `/api/studio/ai/responses`).
+    Delegates execution to the dedicated Google ADK agent (`ap2_shield_agent/studio_agent.py`),
+    operating with `Agent`, `Runner`, `InMemorySessionService`, and `AgStudioClientTool(is_long_running=True)`
+    to power both the `ap2-shield-auditor` agent and AG Studio's specialist sub-agents
+    (`lead`, `data`, `widget`, `page`, `planning`) with automatic deterministic fallback.
     """
     try:
         body = await request.json()

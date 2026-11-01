@@ -18,7 +18,7 @@ export const Topbar: React.FC<TopbarProps> = ({ credsStatus, onOpenConfig }) => 
       } | Channel3: ${credsStatus.channel3_ready ? 'LIVE' : 'FALLBACK'} | Render WF: ${
         credsStatus.render_workflow_ready ? 'LIVE' : 'LOCAL'
       }`
-    : '🔑 Modo: Verificando...';
+    : '🔑 Mode: Checking...';
 
   return (
     <div className="topbar">

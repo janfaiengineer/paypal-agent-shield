@@ -61,7 +61,7 @@ const COLUMNS: Array<{
     color: 'amber',
     accent: '#f59e0b',
     adkNode: 'adk_node_cfo_hitl_quarantine',
-    subtitle: 'Gate 4: Exceso de Presupuesto (Drag → PayPal)',
+    subtitle: 'Gate 4: Budget Exceeded (Drag → PayPal)',
   },
   {
     id: 'PAYPAL_SETTLED',
@@ -161,8 +161,8 @@ export const BryntumTaskBoardView: React.FC<BryntumTaskBoardViewProps> = ({
         type: 'warning',
         text:
           targetColumn === 'PAYPAL_SETTLED'
-            ? `⏳ Re-firmando póliza Ed25519 del CFO, expandiendo presupuesto en AG Grid y reanudando grafo Google ADK 2.0 para ${cardId}...`
-            : `⏳ Rechazando mandato en cuarentena ${cardId} y enviando a Threat Sink...`,
+            ? `⏳ Re-signing CFO Ed25519 policy, expanding AG Grid budget, and resuming Google ADK 2.0 graph for ${cardId}...`
+            : `⏳ Rejecting quarantined mandate ${cardId} and routing to Threat Sink...`,
       });
       try {
         const res = await fetch('/api/quarantine/resolve', {
@@ -181,22 +181,22 @@ export const BryntumTaskBoardView: React.FC<BryntumTaskBoardViewProps> = ({
         if (data.status === 'OK' && data.action === 'APPROVED_AND_SETTLED') {
           setBannerMsg({
             type: 'success',
-            text: `✅ HITL Aprobado y Liquidado: Presupuesto AG Grid expandido a $${Number(
+            text: `✅ HITL Approved & Settled: AG Grid budget expanded to $${Number(
               data.new_max_budget_usd || 0
-            ).toFixed(2)} USD | Orden PayPal Sandbox: ${
+            ).toFixed(2)} USD | PayPal Sandbox Order: ${
               data.paypal_order_id || 'COMPLETED'
-            } | Nodos ADK 2.0: ${(data.adk_visited_nodes || []).join(' → ')}`,
+            } | ADK 2.0 Nodes: ${(data.adk_visited_nodes || []).join(' → ')}`,
           });
         } else if (data.status === 'OK' && data.action === 'REJECTED_BY_CFO') {
           setBannerMsg({
             type: 'error',
-            text: `🚫 Mandato ${cardId} rechazado definitivamente por el CFO y movido a BLOCKED_THREAT.`,
+            text: `🚫 Mandate ${cardId} permanently rejected by the CFO and moved to BLOCKED_THREAT.`,
           });
         } else {
           setBannerMsg({
             type: 'error',
-            text: `⚠️ Operación bloqueada por Zero-Trust Shield: ${
-              data.reason || 'Transición no permitida'
+            text: `⚠️ Operation blocked by Zero-Trust Shield: ${
+              data.reason || 'Transition not allowed'
             }`,
           });
         }
@@ -204,7 +204,7 @@ export const BryntumTaskBoardView: React.FC<BryntumTaskBoardViewProps> = ({
         const msg = err instanceof Error ? err.message : String(err);
         setBannerMsg({
           type: 'error',
-          text: `❌ Error al resolver mandato HITL: ${msg}`,
+          text: `❌ Error resolving HITL mandate: ${msg}`,
         });
       } finally {
         setResolvingId(null);
@@ -299,7 +299,7 @@ export const BryntumTaskBoardView: React.FC<BryntumTaskBoardViewProps> = ({
                     }
                     ${
                       status === 'QUARANTINED'
-                        ? `<div class="ap2-tb-hitl-hint">👉 Arrastra a <strong>PayPal Sandbox Settled</strong> para aprobar excepción CFO (+Presupuesto AG Grid) y liquidar en vivo.</div>`
+                        ? `<div class="ap2-tb-hitl-hint">👉 Drag to <strong>PayPal Sandbox Settled</strong> to approve CFO override (+AG Grid Budget) and settle live.</div>`
                         : ''
                     }
                   </div>
@@ -337,16 +337,16 @@ export const BryntumTaskBoardView: React.FC<BryntumTaskBoardViewProps> = ({
             if (currentStatus !== 'QUARANTINED') {
               setBannerMsg({
                 type: 'warning',
-                text: `🔒 Inmutabilidad Zero-Trust: Solo los mandatos en 'CFO HITL Quarantine' pueden moverse manualmente. (${String(
+                text: `🔒 Zero-Trust Immutability: Only mandates in 'CFO HITL Quarantine' can be moved manually (${String(
                   first.id
-                )} está en ${currentStatus}).`,
+                )} is in ${currentStatus}).`,
               });
               return false;
             }
             if (targetId !== 'PAYPAL_SETTLED' && targetId !== 'BLOCKED_THREAT') {
               setBannerMsg({
                 type: 'warning',
-                text: `⚠️ Arrastra el mandato en cuarentena hacia '✅ PayPal Sandbox Settled' para aprobar y liquidar, o hacia '🚨 Zero-Trust Threat Sink' para rechazar.`,
+                text: `⚠️ Drag the quarantined mandate to '✅ PayPal Sandbox Settled' to approve and settle, or to '🚨 Zero-Trust Threat Sink' to reject.`,
               });
               return false;
             }
@@ -403,7 +403,7 @@ export const BryntumTaskBoardView: React.FC<BryntumTaskBoardViewProps> = ({
 
   return (
     <div className="bryntum-adk-view">
-      {/* 1. TELEMETRÍA EN VIVO DEL GRAFO GOOGLE ADK 2.0 WORKFLOW */}
+      {/* 1. LIVE GOOGLE ADK 2.0 WORKFLOW GRAPH TELEMETRY */}
       <div className="adk-graph-pipeline-card">
         <div className="adk-graph-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -412,14 +412,14 @@ export const BryntumTaskBoardView: React.FC<BryntumTaskBoardViewProps> = ({
               <code>{telemetry?.graph_name || 'ap2_zero_trust_checkout_graph'}</code>
             </span>
             <span className="tag" style={{ background: 'rgba(168, 85, 247, 0.18)', color: '#d8b4fe', borderColor: '#9333ea' }}>
-              Ruta Activa: {telemetry?.last_route || 'route_cfo_hitl_quarantine'}
+              Active Route: {telemetry?.last_route || 'route_cfo_hitl_quarantine'}
             </span>
             <span className="tag" style={{ background: 'rgba(56, 189, 248, 0.14)', color: '#38bdf8' }}>
-              Mandato: {telemetry?.last_mandate_id || 'ap2_chk_hitl_demo'}
+              Mandate: {telemetry?.last_mandate_id || 'ap2_chk_hitl_demo'}
             </span>
           </div>
           <span style={{ fontSize: '11px', color: '#94a3b8' }}>
-            Sincronizado 1-a-1 con Bryntum TaskBoard • {telemetry?.updated_at || 'LIVE'}
+            Synced 1-to-1 with Bryntum TaskBoard • {telemetry?.updated_at || 'LIVE'}
           </span>
         </div>
 
@@ -465,7 +465,7 @@ export const BryntumTaskBoardView: React.FC<BryntumTaskBoardViewProps> = ({
         </div>
       </div>
 
-      {/* 2. BANNER DE RETROALIMENTACIÓN HITL / EJECUCIÓN */}
+      {/* 2. HITL / EXECUTION FEEDBACK BANNER */}
       {bannerMsg && (
         <div className={`hitl-status-banner ${bannerMsg.type}`}>
           <span>{bannerMsg.text}</span>
@@ -486,15 +486,15 @@ export const BryntumTaskBoardView: React.FC<BryntumTaskBoardViewProps> = ({
         </div>
       )}
 
-      {/* 3. BARRA RÁPIDA DE CUARENTENA HITL (DRAG & DROP O 1-CLICK) */}
+      {/* 3. QUICK HITL QUARANTINE ACTION STRIP (DRAG & DROP OR 1-CLICK) */}
       <div className="hitl-action-strip">
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <span style={{ fontWeight: 700, fontSize: '12.5px', color: '#fbbf24' }}>
-            ⏸️ Cola HITL del CFO ({quarantinedCards.length} en cuarentena):
+            ⏸️ CFO HITL Queue ({quarantinedCards.length} quarantined):
           </span>
           {quarantinedCards.length === 0 ? (
             <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-              Sin mandatos pendientes. Ejecuta la prueba <strong>"🚨 3. Exceder Presupuesto"</strong> en el chat para pausar un mandato en el nodo <code>adk_node_cfo_hitl_quarantine</code>.
+              No pending mandates. Run quick test <strong>&quot;⏸️ 3. Exceed Budget (HITL)&quot;</strong> in the chat to pause a mandate at node <code>adk_node_cfo_hitl_quarantine</code>.
             </span>
           ) : (
             quarantinedCards.map((qCard) => (
@@ -505,7 +505,7 @@ export const BryntumTaskBoardView: React.FC<BryntumTaskBoardViewProps> = ({
                     ${Number(qCard.amount_usd ?? 0).toFixed(2)} USD
                   </span>{' '}
                   <span style={{ color: '#94a3b8', fontSize: '11px' }}>
-                    (Saldo AG Grid: ${Number(policy?.remaining_usd || 0).toFixed(2)})
+                    (AG Grid Balance: ${Number(policy?.remaining_usd || 0).toFixed(2)})
                   </span>
                 </span>
                 <button
@@ -515,8 +515,8 @@ export const BryntumTaskBoardView: React.FC<BryntumTaskBoardViewProps> = ({
                   onClick={() => void resolveQuarantineCard(qCard.id, 'PAYPAL_SETTLED')}
                 >
                   {resolvingId === qCard.id
-                    ? '⏳ Liquidando en PayPal...'
-                    : '⚡ Aprobar Excepción CFO (+Presupuesto AG Grid) & Liquidar en PayPal'}
+                    ? '⏳ Settling on PayPal...'
+                    : '⚡ Approve CFO Override (+AG Grid Budget) & Settle on PayPal'}
                 </button>
                 <button
                   type="button"
@@ -524,19 +524,19 @@ export const BryntumTaskBoardView: React.FC<BryntumTaskBoardViewProps> = ({
                   disabled={resolvingId === qCard.id}
                   onClick={() => void resolveQuarantineCard(qCard.id, 'BLOCKED_THREAT')}
                 >
-                  🚫 Rechazar
+                  🚫 Reject
                 </button>
               </div>
             ))
           )}
         </div>
         <div style={{ fontSize: '11.5px', color: '#cbd5e1', whiteSpace: 'nowrap' }}>
-          💡 También puedes <strong>arrastrar y soltar (Drag & Drop)</strong> la tarjeta hacia{' '}
+          💡 You can also <strong>Drag &amp; Drop</strong> the card into{' '}
           <strong style={{ color: '#34d399' }}>PayPal Sandbox Settled</strong>
         </div>
       </div>
 
-      {/* 4. BRYNTUM TASKBOARD OFICIAL (CON FALLBACK INTERACTIVO SI CDN ESTÁ CARGANDO) */}
+      {/* 4. OFFICIAL BRYNTUM TASKBOARD (WITH INTERACTIVE FALLBACK WHILE CDN LOADS) */}
       <div
         ref={boardContainerRef}
         className="bryntum-board-host"
