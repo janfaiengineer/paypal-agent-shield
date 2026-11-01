@@ -43,4 +43,9 @@ pnpm-debug.log*
 Thumbs.db
 *.log
 
+# Media / Demo videos
+*.mp4
+**/*.mp4
+
+
 
