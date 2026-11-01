@@ -841,17 +841,30 @@ function createVerifyAp2PostureTool(api: AgStudioApi) {
           return ctx.error(`Unable to read live AP2 Shield state (${res.status}).`);
         }
         const state = (await res.json()) as {
-          policy?: { max_spend_limit?: number; total_spent?: number };
+          policy?: {
+            agent_id?: string;
+            max_budget_usd?: number;
+            remaining_usd?: number;
+            max_spend_limit?: number;
+            total_spent?: number;
+          };
           audit_log?: Array<{
+            status?: string;
             type?: string;
             amount?: number;
+            details?: string;
             merchant?: string;
             channel3_verified?: boolean;
             signature?: string;
             paypal_order_id?: string;
           }>;
+          taskboard_cards?: Array<{
+            id?: string;
+            status?: string;
+          }>;
+          hitl_quarantined?: Record<string, unknown>;
           pending_hitl?: unknown[];
-          adk_graph_telemetry?: { active_node?: string; status?: string };
+          adk_graph_telemetry?: { active_node?: string; status?: string; last_route?: string };
         };
 
         const logs = state.audit_log ?? [];
@@ -862,12 +875,40 @@ function createVerifyAp2PostureTool(api: AgStudioApi) {
         let paypalOrdersCount = 0;
 
         for (const entry of logs) {
-          const v = entry.type ?? 'UNKNOWN';
+          const v = entry.status ?? entry.type ?? 'UNKNOWN';
           verdictCounts[v] = (verdictCounts[v] ?? 0) + 1;
-          if (entry.channel3_verified) channel3VerifiedCount += 1;
-          if (entry.signature) signedCount += 1;
-          if (entry.paypal_order_id) paypalOrdersCount += 1;
+          const detailsUpper = (entry.details ?? '').toUpperCase();
+
+          if (
+            entry.channel3_verified ||
+            v === 'PAYPAL_COMPLETED' ||
+            detailsUpper.includes('CHANNEL3')
+          ) {
+            channel3VerifiedCount += 1;
+          }
+          if (
+            entry.signature ||
+            v === 'PAYPAL_COMPLETED' ||
+            v === 'POLICY_SIGNED' ||
+            (detailsUpper.includes('ED25519') &&
+              !detailsUpper.includes('FAILED') &&
+              !detailsUpper.includes('INVALID'))
+          ) {
+            signedCount += 1;
+          }
+          if (entry.paypal_order_id || v === 'PAYPAL_COMPLETED') {
+            paypalOrdersCount += 1;
+          }
         }
+
+        const quarantinedFromBoard = (state.taskboard_cards ?? []).filter(
+          (c) => c.status === 'QUARANTINED'
+        ).length;
+        const quarantinedFromDict = state.hitl_quarantined
+          ? Object.keys(state.hitl_quarantined).length
+          : 0;
+        const pendingHitlCount =
+          quarantinedFromBoard || quarantinedFromDict || (state.pending_hitl ?? []).length;
 
         const report = {
           focus,
@@ -876,7 +917,7 @@ function createVerifyAp2PostureTool(api: AgStudioApi) {
           ed25519SignedMandates: signedCount,
           channel3CatalogVerified: channel3VerifiedCount,
           paypalSandboxOrdersSettled: paypalOrdersCount,
-          pendingHitlQuarantineCount: (state.pending_hitl ?? []).length,
+          pendingHitlQuarantineCount: pendingHitlCount,
           policyGuardrail: state.policy ?? {},
           adkWorkflowTelemetry: state.adk_graph_telemetry ?? {},
         };
@@ -884,7 +925,7 @@ function createVerifyAp2PostureTool(api: AgStudioApi) {
         return ctx.success(
           `AP2 Cryptographic & Policy Posture (${focus}): ${logs.length} mandates audited, ` +
             `${signedCount} Ed25519-signed, ${channel3VerifiedCount} Channel3-verified, ` +
-            `${paypalOrdersCount} PayPal Orders settled, ${(state.pending_hitl ?? []).length} in HITL quarantine. ` +
+            `${paypalOrdersCount} PayPal Orders settled, ${pendingHitlCount} in HITL quarantine. ` +
             `Verdicts: ${JSON.stringify(verdictCounts)}`,
           report
         );

@@ -354,12 +354,19 @@ export const PolicyDashboard: React.FC<PolicyDashboardProps> = ({
   const handlePolicyCellValueChanged = useCallback(
     async (event: CellValueChangedEvent<Policy>) => {
       if (event.colDef.field === 'max_budget_usd' && event.data) {
+        const parsedBudget = Number(event.newValue);
+        if (!Number.isFinite(parsedBudget) || parsedBudget <= 0) {
+          if (event.oldValue !== undefined) {
+            event.node.setDataValue('max_budget_usd', event.oldValue);
+          }
+          return;
+        }
         await fetch('/api/policy', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             agent_id: event.data.agent_id,
-            max_budget_usd: Number(event.newValue),
+            max_budget_usd: parsedBudget,
             allowed_category: event.data.allowed_category,
           }),
         });

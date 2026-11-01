@@ -83,38 +83,6 @@ const LAYER_META: Record<
     border: 'rgba(168, 85, 247, 0.35)',
     desc: 'Root CFO Ed25519 policy mandate registration',
   },
-  'L1: Policy Engine': {
-    badge: 'L1',
-    label: 'L1: Policy Engine (Budget & Merchant Bounds)',
-    color: '#f59e0b',
-    bg: 'rgba(245, 158, 11, 0.12)',
-    border: 'rgba(245, 158, 11, 0.35)',
-    desc: 'Enforces CFO budget ceilings & merchant whitelisting',
-  },
-  'L2: Ed25519 Crypto': {
-    badge: 'L2',
-    label: 'L2: Ed25519 Cryptographic Mandate Proof',
-    color: '#38bdf8',
-    bg: 'rgba(56, 189, 248, 0.12)',
-    border: 'rgba(56, 189, 248, 0.35)',
-    desc: 'Verifies non-repudiable Ed25519 signatures & SHA-256 chain',
-  },
-  'L3: Prompt Sanitizer': {
-    badge: 'L3',
-    label: 'L3: Prompt Injection & Price Hallucination Guard',
-    color: '#f43f5e',
-    bg: 'rgba(244, 63, 94, 0.12)',
-    border: 'rgba(244, 63, 94, 0.35)',
-    desc: 'Cross-checks SKU price against Channel3 truth & blocks MitM',
-  },
-  'L4: PayPal Orders v2': {
-    badge: 'L4',
-    label: 'L4: PayPal Orders v2 Settlement (APIMatic SDK)',
-    color: '#10b981',
-    bg: 'rgba(16, 185, 129, 0.12)',
-    border: 'rgba(16, 185, 129, 0.35)',
-    desc: 'Executes verified orders on PayPal Sandbox via APIMatic SDK',
-  },
 };
 
 export const Ap2ShieldPostureWidget: React.FC<AgWidgetParams<Ap2ShieldWidgetState>> = (params) => {
@@ -308,15 +276,19 @@ export const Ap2ShieldPostureWidget: React.FC<AgWidgetParams<Ap2ShieldWidgetStat
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(4, minmax(140px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
           gap: '8px',
           flex: 1,
           alignItems: 'stretch',
         }}
       >
         {Object.entries(LAYER_META).map(([layerKey, meta]) => {
-          const matched = rows.find((r) => r.layer === layerKey);
-          const layerTotal = matched ? matched.totalUsd : 0;
+          const matchedRows = rows.filter(
+            (r) =>
+              r.layer === layerKey ||
+              (layerKey === 'Firma Criptográfica Ed25519' && r.layer === 'Integridad Hash AP2')
+          );
+          const layerTotal = matchedRows.reduce((sum, r) => sum + r.totalUsd, 0);
           const pctOfAll = grandTotal > 0 ? Math.min(100, Math.round((layerTotal / grandTotal) * 100)) : 0;
           const isSelected = activeLayerFilter === layerKey;
 

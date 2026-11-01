@@ -139,6 +139,8 @@ export const BryntumTaskBoardView: React.FC<BryntumTaskBoardViewProps> = ({
     destroy?: () => void;
     project?: { taskStore?: { data: unknown[] } };
   } | null>(null);
+  const cardsRef = useRef<TaskBoardCard[]>(cards);
+  cardsRef.current = cards;
 
   const [bryntumReady, setBryntumReady] = useState<boolean>(
     Boolean(window.bryntum?.taskboard?.TaskBoard)
@@ -226,7 +228,7 @@ export const BryntumTaskBoardView: React.FC<BryntumTaskBoardViewProps> = ({
     return () => window.clearInterval(timer);
   }, []);
 
-  // Initialize Bryntum TaskBoard instance
+  // Initialize Bryntum TaskBoard instance once when Bryntum UMD is ready
   useEffect(() => {
     if (!bryntumReady || !boardContainerRef.current) return;
     const TaskBoardClass = window.bryntum?.taskboard?.TaskBoard;
@@ -238,7 +240,7 @@ export const BryntumTaskBoardView: React.FC<BryntumTaskBoardViewProps> = ({
     }
     boardContainerRef.current.innerHTML = '';
 
-    const formattedTasks = cards.map((c) => ({
+    const formattedTasks = cardsRef.current.map((c) => ({
       ...c,
       name: c.name,
       description: c.description,
@@ -249,7 +251,7 @@ export const BryntumTaskBoardView: React.FC<BryntumTaskBoardViewProps> = ({
     try {
       const board = new TaskBoardClass({
         appendTo: boardContainerRef.current,
-         cls: 'ap2-bryntum-board',
+        cls: 'ap2-bryntum-board',
         useDomTransition: true,
         stickyHeaders: true,
         showCountInHeader: true,
@@ -379,7 +381,20 @@ export const BryntumTaskBoardView: React.FC<BryntumTaskBoardViewProps> = ({
         boardInstanceRef.current = null;
       }
     };
-  }, [bryntumReady, cards, resolveQuarantineCard]);
+  }, [bryntumReady, resolveQuarantineCard]);
+
+  // Sync taskStore data in-place when cards update via SSE without destroying the board
+  useEffect(() => {
+    const taskStore = boardInstanceRef.current?.project?.taskStore;
+    if (!bryntumReady || !taskStore) return;
+    taskStore.data = cards.map((c) => ({
+      ...c,
+      name: c.name,
+      description: c.description,
+      status: c.status,
+      prio: c.prio,
+    }));
+  }, [bryntumReady, cards]);
 
   const visitedSet = new Set(
     (telemetry?.visited_nodes || []).map((n) => n.replace(' (RESUMED)', ''))
@@ -487,7 +502,7 @@ export const BryntumTaskBoardView: React.FC<BryntumTaskBoardViewProps> = ({
                 <span>
                   <strong>{qCard.name}</strong> —{' '}
                   <span style={{ color: '#fbbf24', fontWeight: 700 }}>
-                    ${qCard.amount_usd.toFixed(2)} USD
+                    ${Number(qCard.amount_usd ?? 0).toFixed(2)} USD
                   </span>{' '}
                   <span style={{ color: '#94a3b8', fontSize: '11px' }}>
                     (Saldo AG Grid: ${Number(policy?.remaining_usd || 0).toFixed(2)})
@@ -579,10 +594,10 @@ export const BryntumTaskBoardView: React.FC<BryntumTaskBoardViewProps> = ({
                       </div>
                       <div className="ap2-tb-metrics">
                         <span className="ap2-tb-pill amount">
-                          ${c.amount_usd.toFixed(2)} USD
+                          ${Number(c.amount_usd ?? 0).toFixed(2)} USD
                         </span>
                         <span className="ap2-tb-pill c3">
-                          C3: ${c.c3_price_usd.toFixed(2)}
+                          C3: ${Number(c.c3_price_usd ?? 0).toFixed(2)}
                         </span>
                         <span className="ap2-tb-pill sku">SKU: {c.sku}</span>
                       </div>

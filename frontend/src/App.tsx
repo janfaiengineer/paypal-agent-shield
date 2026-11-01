@@ -88,7 +88,7 @@ export const App: React.FC = () => {
     <>
       <Topbar credsStatus={credsStatus} onOpenConfig={() => setIsConfigOpen(true)} />
       <div className="workspace">
-        <ChatPanel agentModel={credsStatus?.gemini_model || 'gemini-3.5-flash'} />
+        <ChatPanel agentModel={credsStatus?.gemini_model || 'gemini-3.8-flash'} />
         <PolicyDashboard
           policy={policy}
           auditLog={auditLog}

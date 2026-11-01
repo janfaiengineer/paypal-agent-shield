@@ -53,12 +53,12 @@ Always use exact `table.field` identifiers when calling `configure_widget` or `e
 
 **Table `audit_ledger` (Auditoría AP2 & PayPal Sandbox):**
 - Dimensions (categorical / text):
-  - `audit_ledger.decision_type` — **Veredicto Shield / Decisión Financiera** (values: `"Pagado en PayPal"`, `"Bloqueado por AP2 Shield"`, `"En Cuarentena HITL"`, `"Política CFO Firmada"`). **Use this field whenever the user asks about "veredicto", "veredicto de shield", "verdict", "resultado", or "decisión financiera".**
-  - `audit_ledger.policy_decision` — **Estado Político AP2** (values: `"APPROVED_AND_CAPTURED"`, `"BLOCKED"`, `"QUARANTINED_HITL"`, `"POLICY_SIGNED"`).
-  - `audit_ledger.control_layer` — **Capa de Seguridad AP2** (values: `"PayPal Sandbox Settlement"`, `"Channel3 Anti-Hallucination"`, `"Límite Presupuestario CFO"`, `"Firma Criptográfica Ed25519"`, `"Cuarentena HITL (Bryntum)"`, `"Gobernanza CFO"`).
-  - `audit_ledger.risk_level` — **Nivel de Riesgo** (values: `"CRITICAL"`, `"HIGH"`, `"LOW"`).
-  - `audit_ledger.ap2_mandate_status` — **Estado Criptográfico Ed25519** (values: `"ED25519_VERIFIED"`, `"CRYPTO_REJECTED"`, `"BUDGET_EXCEEDED"`).
-  - `audit_ledger.channel3_verified` — **Verificación Channel3** (values: `"VERIFIED"`, `"BLOCKED_MISMATCH"`).
+  - `audit_ledger.decision_type` — **Veredicto Shield / Decisión Financiera** (values: `"Pago Liquidado (PayPal)"`, `"Cuarentena HITL (Bryntum TaskBoard)"`, `"Capital Protegido (Bloqueado)"`, `"Gobernanza / Firma de Política"`). **Use this field whenever the user asks about "veredicto", "veredicto de shield", "verdict", "resultado", or "decisión financiera".**
+  - `audit_ledger.policy_decision` — **Estado Político AP2** (values: `"PAYPAL_COMPLETED"`, `"QUARANTINED_HITL"`, `"BLOCKED_BY_SHIELD"`, `"POLICY_SIGNED"`).
+  - `audit_ledger.control_layer` — **Capa de Seguridad AP2** (values: `"Liquidación PayPal Sandbox"`, `"Límite de Presupuesto CFO"`, `"Anti-Alucinación Channel3"`, `"Firma Criptográfica Ed25519"`, `"Integridad Hash AP2"`, `"Gobernanza CFO (Política)"`).
+  - `audit_ledger.risk_level` — **Nivel de Riesgo** (values: `"Crítico (Ataque Bloqueado)"`, `"Medio (Cuarentena HITL)"`, `"Bajo (Verificado AP2)"`, `"Informativo (Política)"`).
+  - `audit_ledger.ap2_mandate_status` — **Estado Criptográfico Ed25519** (values: `"Firma Ed25519 Válida"`, `"Pausado en Nodo ADK HITL"`, `"Firma Rechazada / Alterada"`).
+  - `audit_ledger.channel3_verified` — **Verificación Channel3** (values: `"Ground-Truth OK"`, `"Pendiente HITL"`, `"Alucinación / MitM"`, `"N/A (Gobernanza)"`).
   - `audit_ledger.merchant` — **Comercio Destino** (e.g., `"office-supply@sandbox.paypal.com"`, `"monitors-direct@sandbox.paypal.com"`, `"hacker@darkweb.io"`, `"apple-b2b@paypal.com"`).
   - `audit_ledger.item` — **Producto / Operación** (product name or SKU).
   - `audit_ledger.agent_id` — **Agente IA** (e.g., `"procurement-01"`).

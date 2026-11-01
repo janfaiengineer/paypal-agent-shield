@@ -1,5 +1,6 @@
 import os
 import re
+import math
 import asyncio
 import uuid
 import json
@@ -8,7 +9,7 @@ from datetime import datetime
 from typing import List
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -132,7 +133,7 @@ state = {
             "policy_id": "pol_aggrid_001",
             "agent_id": "procurement-01",
             "max_budget_usd": 200.00,
-            "remaining_usd": 200.00,
+            "remaining_usd": 80.00,
             "allowed_category": "OFFICE_AND_TECH",
             "cfo_signature": _init_sig,
             "cfo_pubkey": get_public_key_hex(CFO_PUBLIC_KEY)[:16],
@@ -165,7 +166,7 @@ state = {
             "amount": 799.00,
             "merchant": "monitors-direct@sandbox.paypal.com",
             "status": "QUARANTINED_HITL",
-            "details": "BUDGET_EXCEEDED_HITL: Pausado en nodo ADK adk_node_cfo_hitl_quarantine ($799.00 > $200.00 límite CFO).",
+            "details": "BUDGET_EXCEEDED_HITL: Pausado en nodo ADK adk_node_cfo_hitl_quarantine ($799.00 > $80.00 saldo CFO).",
         },
         {
             "timestamp": datetime.now().strftime("%H:%M:%S"),
@@ -210,7 +211,7 @@ state = {
             "amount": 799.00,
             "amount_usd": 799.00,
             "c3_price_usd": 799.00,
-            "shortfall_usd": 599.00,
+            "shortfall_usd": 719.00,
             "merchant": "monitors-direct@sandbox.paypal.com",
             "status": "QUARANTINED",
             "prio": "high",
@@ -224,13 +225,72 @@ state = {
             ],
             "gate_code": "BUDGET_EXCEEDED_HITL",
             "ed25519_sig": _init_sig[:18] + "...",
-            "badge": "⏳ HITL: Drag to Settle (+$599.00)",
+            "badge": "⏳ HITL: Drag to Settle (+$719.00)",
             "details": "Pausado en nodo ADK `adk_node_cfo_hitl_quarantine`. Arrastra a 'PayPal Sandbox Settled' para auto-firmar Ed25519 y liquidar.",
-            "description": "Pausado en nodo ADK adk_node_cfo_hitl_quarantine ($799.00 > $200.00 saldo AG Grid).",
+            "description": "Pausado en nodo ADK adk_node_cfo_hitl_quarantine ($799.00 > $80.00 saldo AG Grid).",
             "timestamp": datetime.now().strftime("%H:%M:%S"),
             "updated_at": datetime.now().strftime("%H:%M:%S"),
             "hitl_quarantined": True,
             "can_approve_hitl": True,
+        },
+        {
+            "id": "ap2_chk_c3_seed",
+            "mandate_id": "ap2_chk_c3_seed",
+            "name": "Ergonomic Mesh Chair",
+            "sku": "CHAIR-ERG-01",
+            "amount": 120.00,
+            "amount_usd": 120.00,
+            "c3_price_usd": 120.00,
+            "merchant": "office-supply@sandbox.paypal.com",
+            "status": "PAYPAL_SETTLED",
+            "prio": "medium",
+            "adk_node": "adk_node_paypal_settlement",
+            "adk_route": "route_paypal_settlement",
+            "adk_nodes": [
+                "adk_node_crypto_gate",
+                "adk_node_channel3_ground_truth",
+                "adk_node_policy_budget_gate",
+                "adk_node_paypal_settlement",
+            ],
+            "gate_code": "ALL_5_GATES_PASSED",
+            "ed25519_sig": _init_sig[:18] + "...",
+            "paypal_tx_id": "PAYPAL-SANDBOX-88A1",
+            "paypal_order_id": "PAYPAL-SANDBOX-88A1",
+            "badge": "✅ PayPal: PAYPAL-SANDBOX-88A1",
+            "details": "Liquidado en PayPal (SANDBOX_SIMULATED) | Channel3 Ground-Truth ($120.00)",
+            "description": "Liquidado en PayPal (SANDBOX_SIMULATED) | Channel3 Ground-Truth ($120.00)",
+            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "updated_at": datetime.now().strftime("%H:%M:%S"),
+            "hitl_quarantined": False,
+            "can_approve_hitl": False,
+        },
+        {
+            "id": "ap2_chk_mitm_01",
+            "mandate_id": "ap2_chk_mitm_01",
+            "name": "Spoofed GPU Cluster",
+            "sku": "HALLUCINATED-SKU",
+            "amount": 950.00,
+            "amount_usd": 950.00,
+            "c3_price_usd": 950.00,
+            "merchant": "hacker@darkweb.io",
+            "status": "BLOCKED_THREAT",
+            "prio": "high",
+            "adk_node": "adk_node_threat_sink",
+            "adk_route": "route_threat_sink",
+            "adk_nodes": [
+                "adk_node_crypto_gate",
+                "adk_node_channel3_ground_truth",
+                "adk_node_threat_sink",
+            ],
+            "gate_code": "HALLUCINATION_BLOCKED",
+            "ed25519_sig": "TAMPERED_MITM_SIG...",
+            "badge": "🛑 HALLUCINATION_BLOCKED",
+            "details": "GROUND_TRUTH_MISMATCH & ED25519_TAMPERED: Interceptado por Firewall Criptográfico AP2 antes de PayPal Sandbox.",
+            "description": "GROUND_TRUTH_MISMATCH & ED25519_TAMPERED: Interceptado por Firewall Criptográfico AP2 antes de PayPal Sandbox.",
+            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "updated_at": datetime.now().strftime("%H:%M:%S"),
+            "hitl_quarantined": False,
+            "can_approve_hitl": False,
         },
     ],
     "adk_graph_telemetry": {
@@ -479,9 +539,8 @@ async def search_live_channel3(q: str = "office chair", max_price: float | None 
     """
     c3_key = os.environ.get("CHANNEL3_API_KEY", "").strip()
 
-    # 1. Si no hay API Key de Channel3 configurada, usa el catálogo semilla de respaldo
-    if not c3_key or "tu_api_key" in c3_key:
-        fallback_items = [
+    def _build_fallback_catalog():
+        return [
             {
                 "sku": sku,
                 "name": sku,
@@ -497,20 +556,35 @@ async def search_live_channel3(q: str = "office chair", max_price: float | None 
             for sku, data in TRUSTED_CATALOG.items()
             if max_price is None or float(data["price"]) <= float(max_price)
         ]
+
+    # 1. Si no hay API Key de Channel3 configurada, usa el catálogo semilla de respaldo
+    if not c3_key or "tu_api_key" in c3_key:
+        fallback_items = _build_fallback_catalog()
+        first_price = float(fallback_items[0]["price"]) if fallback_items else 0.0
+        ts = now_str()
         _upsert_taskboard_card({
             "id": "c3_sync_seed",
             "mandate_id": "c3_sync_seed",
             "name": f"Channel3 Search: '{q}'",
             "sku": f"{len(fallback_items)} Verified SKUs",
-            "amount": fallback_items[0]["price"] if fallback_items else 0.0,
+            "amount": first_price,
+            "amount_usd": first_price,
+            "c3_price_usd": first_price,
             "merchant": fallback_items[0]["paypal_email"] if fallback_items else "sandbox.paypal.com",
             "status": "CHANNEL3_DISCOVERY",
+            "prio": "low",
+            "adk_node": "adk_node_channel3_ground_truth",
             "adk_route": "ground_truth_locked",
             "adk_nodes": ["START", "search_catalog_channel3"],
+            "gate_code": "GROUND_TRUTH_SYNCED",
+            "ed25519_sig": state["policies"]["procurement-01"]["cfo_signature"][:18] + "...",
             "badge": "Ground-Truth Synced",
             "details": f"Catálogo sincronizado ({len(fallback_items)} SKUs). Anti-alucinación activa.",
-            "timestamp": now_str(),
+            "description": f"Catálogo sincronizado ({len(fallback_items)} SKUs). Anti-alucinación activa.",
+            "timestamp": ts,
+            "updated_at": ts,
             "hitl_quarantined": False,
+            "can_approve_hitl": False,
         })
         await broadcast_state()
         return {"mode": "FALLBACK_CATALOG", "products": fallback_items}
@@ -568,7 +642,8 @@ async def search_live_channel3(q: str = "office chair", max_price: float | None 
         return {"mode": "LIVE_CHANNEL3_API", "products": live_products}
 
     except Exception as e:
-        return {"mode": "CHANNEL3_ERROR_FALLBACK", "error": str(e), "products": []}
+        fallback_items = _build_fallback_catalog()
+        return {"mode": "CHANNEL3_ERROR_FALLBACK", "error": str(e), "products": fallback_items}
 
 
 @app.get("/api/catalog/enrich/{sku}")
@@ -636,6 +711,14 @@ async def enrich_and_recommend_channel3(sku: str, max_price: float | None = None
 
 @app.post("/api/policy")
 async def update_policy(update: PolicyUpdate):
+    if not math.isfinite(update.max_budget_usd) or update.max_budget_usd <= 0:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "status": "ERROR",
+                "error": "El presupuesto máximo (max_budget_usd) debe ser un número positivo mayor a $0.00.",
+            },
+        )
     pol_id = f"pol_{uuid.uuid4().hex[:6]}"
     real_cfo_sig = sign_cfo_policy(
         pol_id, update.agent_id, update.max_budget_usd, update.allowed_category
@@ -644,8 +727,8 @@ async def update_policy(update: PolicyUpdate):
     new_policy = {
         "policy_id": pol_id,
         "agent_id": update.agent_id,
-        "max_budget_usd": update.max_budget_usd,
-        "remaining_usd": update.max_budget_usd,
+        "max_budget_usd": round(float(update.max_budget_usd), 2),
+        "remaining_usd": round(float(update.max_budget_usd), 2),
         "allowed_category": update.allowed_category,
         "cfo_signature": real_cfo_sig,
         "cfo_pubkey": get_public_key_hex(CFO_PUBLIC_KEY)[:16],
@@ -726,6 +809,16 @@ async def _settle_mandate_on_paypal(
 @app.post("/api/checkout")
 async def process_ap2_checkout(req: CheckoutRequest):
     p = state["policies"].get(req.agent_id)
+    if p is None:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "authorized": False,
+                "status": "BLOCKED_BY_SHIELD",
+                "code": "UNKNOWN_AGENT_ID",
+                "error": f"AGENT_POLICY_NOT_FOUND: No existe política activa para el agente '{req.agent_id}'.",
+            },
+        )
     expected_hash = enrich_policy_hash(p)
     trusted_item = TRUSTED_CATALOG.get(req.sku)
 
@@ -850,7 +943,12 @@ async def process_ap2_checkout(req: CheckoutRequest):
             "details": err_reason or "PAYPAL_SETTLEMENT_FAILED",
         })
         await broadcast_state()
-        return {"authorized": False, "error": err_reason, "remaining_usd": p["remaining_usd"]}
+        return {
+            "authorized": False,
+            "status": "BLOCKED_BY_SHIELD",
+            "error": err_reason,
+            "remaining_usd": p["remaining_usd"],
+        }
 
     p["remaining_usd"] = round(p["remaining_usd"] - req.total_amount, 2)
     pp_tx_id = pp_settlement["paypal_order_id"]
@@ -896,7 +994,9 @@ async def process_ap2_checkout(req: CheckoutRequest):
     await broadcast_state()
     return {
         "authorized": True,
+        "status": "PAYPAL_COMPLETED",
         "paypal_tx_id": pp_tx_id,
+        "paypal_order_id": pp_tx_id,
         "paypal_mode": pp_mode,
         "workflow_engine": workflow_engine_note,
         "adk_graph_route": adk_route,
@@ -923,15 +1023,37 @@ async def resolve_quarantined_mandate(req: QuarantineResolveRequest):
     if not target_card:
         return {"status": "ERROR", "reason": f"No se encontró la tarjeta '{lookup_id}' en Bryntum TaskBoard.", "error": f"No se encontró la tarjeta '{lookup_id}' en Bryntum TaskBoard."}
 
-    if target_card.get("status") == "BLOCKED_THREAT" and not target_card.get("hitl_quarantined"):
+    card_status = str(target_card.get("status") or "").upper()
+    if card_status == "PAYPAL_SETTLED":
+        return {
+            "status": "ALREADY_SETTLED",
+            "action": "ALREADY_SETTLED",
+            "reason": f"El mandato '{lookup_id}' ya fue liquidado previamente en PayPal Sandbox.",
+            "card": target_card,
+        }
+
+    if card_status == "BLOCKED_THREAT" and not target_card.get("hitl_quarantined"):
         return {
             "status": "FORBIDDEN_ZERO_TRUST",
             "reason": "Zero-Trust Policy: Los ataques criptográficos (MitM) o alucinaciones de precios no pueden aprobarse.",
             "error": "Zero-Trust Policy: Los ataques criptográficos (MitM) o alucinaciones de precios no pueden aprobarse.",
         }
 
+    if card_status != "QUARANTINED" and not target_card.get("hitl_quarantined"):
+        return {
+            "status": "INVALID_CARD_STATE",
+            "reason": f"La tarjeta '{lookup_id}' (estado={card_status}) no es un mandato en cuarentena HITL.",
+            "error": f"La tarjeta '{lookup_id}' (estado={card_status}) no es un mandato en cuarentena HITL.",
+        }
+
     p = state["policies"]["procurement-01"]
     target_col = req.target_column.strip().upper()
+    if target_col not in ("PAYPAL_SETTLED", "BLOCKED_THREAT"):
+        return {
+            "status": "ERROR",
+            "reason": f"Columna destino '{target_col}' no válida. Usa 'PAYPAL_SETTLED' o 'BLOCKED_THREAT'.",
+            "error": f"Columna destino '{target_col}' no válida. Usa 'PAYPAL_SETTLED' o 'BLOCKED_THREAT'.",
+        }
 
     # Caso A: CFO arrastra la tarjeta a 'BLOCKED_THREAT' (Rechazar compra en cuarentena)
     if target_col == "BLOCKED_THREAT":
@@ -959,11 +1081,16 @@ async def resolve_quarantined_mandate(req: QuarantineResolveRequest):
             "bryntum_column": "BLOCKED_THREAT",
             "updated_at": now_str(),
         }
+        state["audit_log"] = [
+            e for e in state["audit_log"]
+            if not (e.get("mandate_id") == target_card["mandate_id"] and e.get("status") == "QUARANTINED_HITL")
+        ]
         state["audit_log"].insert(0, {
             "timestamp": now_str(),
             "mandate_id": target_card["mandate_id"],
             "item": f"{target_card['name']} (Bryntum HITL Reject)",
             "amount": target_card["amount"],
+            "merchant": target_card.get("merchant", "sandbox.paypal.com"),
             "status": "BLOCKED_BY_SHIELD",
             "details": "CFO rechazó el mandato en cuarentena desde Bryntum TaskBoard.",
         })
@@ -980,27 +1107,15 @@ async def resolve_quarantined_mandate(req: QuarantineResolveRequest):
     if sku not in TRUSTED_CATALOG:
         TRUSTED_CATALOG[sku] = {"price": amount, "paypal_email": merchant_email}
 
-    # 1. Ampliar el presupuesto en AG Grid para cubrir la orden y re-firmar con la llave privada Ed25519 del CFO
+    # 1. Calcular el nuevo presupuesto para cubrir la orden y pre-firmar con la llave privada Ed25519 del CFO
     shortfall = max(0.0, round(amount - p["remaining_usd"], 2))
     new_max_budget = round(p["max_budget_usd"] + shortfall + 50.0, 2) if shortfall > 0 else p["max_budget_usd"]
     new_remaining_before_charge = round(p["remaining_usd"] + shortfall + 50.0, 2) if shortfall > 0 else p["remaining_usd"]
     new_pol_id = f"pol_hitl_{uuid.uuid4().hex[:5]}"
     new_cfo_sig = sign_cfo_policy(new_pol_id, p["agent_id"], new_max_budget, p["allowed_category"])
-
-    p["policy_id"] = new_pol_id
-    p["max_budget_usd"] = new_max_budget
-    p["remaining_usd"] = new_remaining_before_charge
-    p["cfo_signature"] = new_cfo_sig
-    new_policy_hash = enrich_policy_hash(p)
-
-    state["audit_log"].insert(0, {
-        "timestamp": now_str(),
-        "mandate_id": new_pol_id,
-        "item": "CFO HITL Override (Bryntum TaskBoard)",
-        "amount": new_max_budget,
-        "status": "POLICY_SIGNED",
-        "details": f"Bryntum Drag-to-Approve | Ed25519 CFO Sig: {new_cfo_sig[:16]}... | New AP2 Hash: {new_policy_hash[:14]}...",
-    })
+    new_policy_hash = compute_policy_hash(
+        new_pol_id, p["agent_id"], new_max_budget, p["allowed_category"], new_cfo_sig
+    )
 
     # 2. Re-firmar el mandato de checkout con el nuevo Policy Hash y reanudar el Grafo ADK 2.0
     resumed_agent_sig = sign_agent_checkout(
@@ -1022,11 +1137,11 @@ async def resolve_quarantined_mandate(req: QuarantineResolveRequest):
         "total_amount": amount,
         "merchant_paypal_email": merchant_email,
         "agent_signature": resumed_agent_sig,
-        "policy_id": p["policy_id"],
-        "max_budget_usd": p["max_budget_usd"],
-        "remaining_usd": p["remaining_usd"],
+        "policy_id": new_pol_id,
+        "max_budget_usd": new_max_budget,
+        "remaining_usd": new_remaining_before_charge,
         "allowed_category": p["allowed_category"],
-        "cfo_signature": p["cfo_signature"],
+        "cfo_signature": new_cfo_sig,
         "trusted_item": TRUSTED_CATALOG.get(sku),
         "hitl_override_approved": True,
         "visited_nodes": ["adk_node_cfo_hitl_quarantine (RESUMED)"],
@@ -1052,7 +1167,27 @@ async def resolve_quarantined_mandate(req: QuarantineResolveRequest):
         await broadcast_state()
         return {"status": "ERROR", "error": err_reason or "PAYPAL_SETTLEMENT_ERROR"}
 
-    p["remaining_usd"] = round(p["remaining_usd"] - amount, 2)
+    # Confirmar actualización de política y descontar el cargo ya liquidado
+    p["policy_id"] = new_pol_id
+    p["max_budget_usd"] = new_max_budget
+    p["remaining_usd"] = round(new_remaining_before_charge - amount, 2)
+    p["cfo_signature"] = new_cfo_sig
+    enrich_policy_hash(p)
+
+    state["audit_log"] = [
+        e for e in state["audit_log"]
+        if not (e.get("mandate_id") == target_card["mandate_id"] and e.get("status") == "QUARANTINED_HITL")
+    ]
+    state["audit_log"].insert(0, {
+        "timestamp": now_str(),
+        "mandate_id": new_pol_id,
+        "item": "CFO HITL Override (Bryntum TaskBoard)",
+        "amount": new_max_budget,
+        "merchant": merchant_email,
+        "status": "POLICY_SIGNED",
+        "details": f"Bryntum Drag-to-Approve | Ed25519 CFO Sig: {new_cfo_sig[:16]}... | New AP2 Hash: {new_policy_hash[:14]}...",
+    })
+
     pp_tx_id = pp_settlement["paypal_order_id"]
     pp_mode = pp_settlement["mode"]
 

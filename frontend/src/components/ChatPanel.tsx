@@ -153,7 +153,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ agentModel }) => {
       <div className="chat-header">
         <span>🤖 Google ADK Procurement Agent</span>
         <span id="agent-model-badge" style={{ fontSize: '11px', color: 'var(--muted)' }}>
-          {agentModel || 'gemini-3.5-flash'}
+          {agentModel || 'gemini-3.8-flash'}
         </span>
       </div>
 
