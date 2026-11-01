@@ -5,7 +5,7 @@
 
 [![PayPal AI Hackathon](https://img.shields.io/badge/PayPal_AI_Hackathon-2026_Submission-003087?style=for-the-badge&logo=paypal&logoColor=white)](https://paypalaihackathon.devpost.com/)
 [![Live Demo](https://img.shields.io/badge/Live_Demo-Render_Cloud-10B981?style=for-the-badge&logo=render&logoColor=white)](https://paypal-agent-shield-web.onrender.com/)
-[![Demo Video](https://img.shields.io/badge/Watch_Demo-YouTube-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/1vaVpO7tKho)
+[![Demo Video](https://img.shields.io/badge/Watch_Demo-YouTube-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/auxvZ1RyTlo)
 [![Google ADK](https://img.shields.io/badge/Google_ADK-Gemini_Agent-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://google.github.io/adk-docs/)
 [![Protocol](https://img.shields.io/badge/AP2_Protocol-Ed25519_%2B_SHA256-10B981?style=for-the-badge)](./ap2_crypto.py)
 [![PayPal SDK](https://img.shields.io/badge/PayPal_Orders_v2-APIMatic_SDK-0070BA?style=for-the-badge&logo=paypal&logoColor=white)](./paypal_apimatic_client.py)
@@ -16,9 +16,9 @@
 
 *Empowering AI Agents to buy autonomously across 100M+ real products—while mathematically guaranteeing they can never hallucinate prices, exceed CFO budgets, or leak PayPal credentials.*
 
-### 🌐 **[Launch Live Demo on Render](https://paypal-agent-shield-web.onrender.com/)** &nbsp;|&nbsp; 🎥 **[Watch Full Demo Video (YouTube)](https://youtu.be/1vaVpO7tKho)**
+### 🌐 **[Launch Live Demo on Render](https://paypal-agent-shield-web.onrender.com/)** &nbsp;|&nbsp; 🎥 **[Watch Full Demo Video (YouTube)](https://youtu.be/auxvZ1RyTlo)**
 
-[![PayPal Agent Shield Demo Video](https://img.youtube.com/vi/1vaVpO7tKho/maxresdefault.jpg)](https://youtu.be/1vaVpO7tKho)
+[![PayPal Agent Shield Demo Video](https://img.youtube.com/vi/auxvZ1RyTlo/maxresdefault.jpg)](https://youtu.be/auxvZ1RyTlo)
 
 </div>
 
