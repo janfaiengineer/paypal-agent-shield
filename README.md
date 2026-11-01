@@ -128,7 +128,7 @@ The Unified Console ([`index.html`](./index.html)) includes **5 built-in red-tea
 
 ## 🚀 Quickstart (Local Setup in 60 Seconds)
 
-> **Zero-Friction Judging Mode:** The application runs out-of-the-box even if you only have a `GOOGLE_API_KEY`! PayPal Sandbox, Channel3, and Render Workflows automatically degrade gracefully to deterministic local simulation/fallback modes, and you can inject or swap any API key live from the browser UI via the **⚙️ API Keys (BYOK)** button without restarting the server.
+> **Zero-Friction Judging & Hot-Reloading BYOK Mode:** The application boots cleanly even with **zero** third-party keys pre-configured! PayPal Sandbox (`SANDBOX_SIMULATED`), Channel3 (`LOCAL_FALLBACK`), AG Studio (`ap2-deterministic-auditor`), and Render Workflows (`LOCAL_FALLBACK`) degrade gracefully out-of-the-box. At any point, users or judges can inject or swap their own `GOOGLE_API_KEY`, `GEMINI_MODEL`, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `CHANNEL3_API_KEY`, or `RENDER_API_KEY` live from the browser UI via the **🔑 API Keys (BYOK)** button—instantly refreshing the Google ADK Gemini client cache and forwarding PayPal credentials to the distributed Render Workflows worker without restarting the server.
 
 ### 1. Prerequisites
 - **Python 3.12+**
@@ -141,21 +141,21 @@ cd paypal-agent-shield
 uv sync
 ```
 
-### 3. Configure Environment Variables
+### 3. Configure Environment Variables (`.env` or Live BYOK Modal)
 ```bash
 cp .env.example .env
 ```
-Edit `.env` (or configure keys live in the Web UI via **⚙️ API Keys (BYOK)**):
+Edit `.env` or leave them blank and enter your keys live in the Web UI via **🔑 API Keys (BYOK)**:
 ```ini
-# Required for Google ADK Agent reasoning
+# Optional at startup (can be entered live via BYOK) — Required for live Gemini ADK reasoning
 GOOGLE_API_KEY=AIzaSy...
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.8-flash
 
-# Optional — Enables Live PayPal Sandbox Orders v2 via APIMatic SDK
+# Optional (can be entered live via BYOK) — Enables Live PayPal Sandbox Orders v2 via APIMatic SDK
 PAYPAL_CLIENT_ID=your_paypal_sandbox_client_id
 PAYPAL_CLIENT_SECRET=your_paypal_sandbox_client_secret
 
-# Optional — Enables Live 100M+ Product Search via Channel3 SDK
+# Optional (can be entered live via BYOK) — Enables Live 100M+ Product Search via Channel3 SDK
 CHANNEL3_API_KEY=your_channel3_api_key
 
 # Optional — Enables Distributed Task Chaining on Render Workflows
@@ -171,11 +171,16 @@ Open **[http://localhost:8001](http://localhost:8001)** in your browser.
 
 ---
 
-## ☁️ One-Click Cloud Deployment on Render
+## ☁️ One-Click Cloud Deployment on Render & BYOK Propagation
 
 This repository includes a production-ready [`render.yaml`](./render.yaml) Blueprint that provisions both:
-1. **`paypal-agent-shield-web`**: The Unified FastAPI + AG Grid + Google ADK Web Console.
+1. **`paypal-agent-shield-web`**: The Unified FastAPI + AG Grid + AG Studio 3 + Bryntum TaskBoard + Google ADK Web Console.
 2. **`paypal-shield-workflow`**: The distributed Render Workflows worker running [`shield_workflows.py`](./shield_workflows.py).
+
+### 🔑 How BYOK Works with Render Workflows in Production
+- **Public Multi-Tester / Judge Mode:** You can safely omit `GOOGLE_API_KEY`, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, and `CHANNEL3_API_KEY` from the Render Dashboard environment variables so each visitor provides their own credentials via the **🔑 API Keys (BYOK)** modal.
+- **Cross-Container BYOK Propagation:** Because `paypal-shield-workflow` runs in an isolated Render Workflows container, [`_settle_mandate_on_paypal`](./shield_server.py) securely forwards any BYOK `paypal_client_id` and `paypal_client_secret` inside the encrypted `workflow_payload` to [`settle_paypal_sandbox_task`](./shield_workflows.py), which hot-configures `PayPalAPIMaticProcessor` on the worker node before calling PayPal Orders v2 Sandbox.
+- **Host Workflow Orchestration:** Keep `RENDER_API_KEY` and `RENDER_WORKFLOW_SLUG` (`paypal-shield-workflow`) configured on the `paypal-agent-shield-web` service in Render so your web instance can trigger the `paypal-shield-workflow` worker deployed in your Render workspace. If omitted or unreachable, the server automatically falls back to local inline settlement (`LOCAL_FALLBACK`).
 
 ---
 
@@ -189,8 +194,10 @@ paypal-agent-shield/
 ├── shield_workflows.py        # Distributed Render Workflows tasks (crypto verification -> PayPal settlement)
 ├── shield_server.py           # FastAPI Zero-Trust Control Plane, 5-Gate Firewall, Channel3 sync & SSE stream
 ├── ap2_shield_agent/
-│   └── agent.py               # Google ADK Autonomous Procurement Agent & tool definitions
-├── index.html                 # Unified Dark-Mode Console (AG Grid Quartz Dark + ADK Chat + BYOK Modal)
+│   ├── agent.py               # Google ADK 2.0 Autonomous Procurement Agent & Deterministic Graph Workflow
+│   └── studio_agent.py        # Dedicated Google ADK BI & Forensic Auditor Agent for AG Studio 3
+├── frontend/                  # React + Vite + AG Grid + AG Studio 3 + Bryntum TaskBoard Unified Console
+├── index.html                 # Standalone fallback console (AG Grid Quartz Dark + ADK Chat + BYOK Modal)
 ├── render.yaml                # Render Infrastructure-as-Code Blueprint (Web Service + Workflow Service)
 ├── .env.example               # Documented environment template with direct dashboard links
 └── pyproject.toml             # Python 3.12+ dependencies managed with uv
