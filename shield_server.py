@@ -402,11 +402,17 @@ async def get_config_status():
 async def update_runtime_config(cfg: CredentialsConfig):
     """Actualiza en memoria las credenciales de Google ADK, PayPal APIMatic SDK, Channel3 y Render Workflows."""
     if cfg.google_api_key.strip():
-        os.environ["GOOGLE_API_KEY"] = cfg.google_api_key.strip()
+        new_key = cfg.google_api_key.strip()
+        os.environ["GOOGLE_API_KEY"] = new_key
+        os.environ.pop("GEMINI_API_KEY", None)
+        if hasattr(root_agent, "_model_cache"):
+            root_agent._model_cache = type(root_agent._model_cache)()
 
     if cfg.gemini_model.strip():
         os.environ["GEMINI_MODEL"] = cfg.gemini_model.strip()
         root_agent.model = cfg.gemini_model.strip()
+        if hasattr(root_agent, "_model_cache"):
+            root_agent._model_cache = type(root_agent._model_cache)()
 
     if cfg.paypal_client_id.strip() and cfg.paypal_client_secret.strip():
         os.environ["PAYPAL_CLIENT_ID"] = cfg.paypal_client_id.strip()
