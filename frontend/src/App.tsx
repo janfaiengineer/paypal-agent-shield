@@ -47,12 +47,16 @@ export const App: React.FC = () => {
   );
 
   useEffect(() => {
-    void refreshCredsStatus();
+    let evtSource: EventSource | null = null;
+    let cancelled = false;
 
-    const loadInitialState = async () => {
+    const bootstrapSession = async () => {
+      await refreshCredsStatus();
+      if (cancelled) return;
+
       try {
         const res = await fetch('/api/state');
-        if (res.ok) {
+        if (res.ok && !cancelled) {
           const data: ShieldState = await res.json();
           setPolicy(data.policy);
           setAuditLog(data.audit_log);
@@ -62,25 +66,29 @@ export const App: React.FC = () => {
       } catch (err) {
         console.error('Error loading initial state:', err);
       }
+
+      if (cancelled) return;
+      evtSource = new EventSource('/api/stream');
+      evtSource.onmessage = (event) => {
+        try {
+          const data: ShieldState = JSON.parse(event.data);
+          setPolicy(data.policy);
+          setAuditLog(data.audit_log);
+          if (data.taskboard_cards) setTaskboardCards(data.taskboard_cards);
+          if (data.adk_graph_telemetry) setAdkGraphTelemetry(data.adk_graph_telemetry);
+        } catch (err) {
+          console.error('Error parsing SSE state:', err);
+        }
+      };
     };
 
-    void loadInitialState();
-
-    const evtSource = new EventSource('/api/stream');
-    evtSource.onmessage = (event) => {
-      try {
-        const data: ShieldState = JSON.parse(event.data);
-        setPolicy(data.policy);
-        setAuditLog(data.audit_log);
-        if (data.taskboard_cards) setTaskboardCards(data.taskboard_cards);
-        if (data.adk_graph_telemetry) setAdkGraphTelemetry(data.adk_graph_telemetry);
-      } catch (err) {
-        console.error('Error parsing SSE state:', err);
-      }
-    };
+    void bootstrapSession();
 
     return () => {
-      evtSource.close();
+      cancelled = true;
+      if (evtSource) {
+        evtSource.close();
+      }
     };
   }, [refreshCredsStatus]);
 

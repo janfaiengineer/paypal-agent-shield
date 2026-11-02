@@ -1,5 +1,6 @@
 import os
 import re
+import copy
 import math
 import secrets
 import asyncio
@@ -131,8 +132,68 @@ adk_runner = Runner(
     session_service=session_service,
 )
 
+class _SessionScopedDict(dict):
+    """
+    Transparent dict proxy that routes all reads and writes to the caller's isolated
+    session dictionary (keyed by `ACTIVE_SHIELD_SESSION_ID`), falling back to a default
+    in-memory copy when accessed outside an HTTP request context.
+    """
+
+    def __init__(self, resolver):
+        super().__init__()
+        self._resolver = resolver
+
+    def _target(self) -> dict[str, Any]:
+        return self._resolver()
+
+    def __getitem__(self, key):
+        return self._target()[key]
+
+    def __setitem__(self, key, value):
+        self._target()[key] = value
+
+    def __delitem__(self, key):
+        del self._target()[key]
+
+    def __contains__(self, key):
+        return key in self._target()
+
+    def __iter__(self):
+        return iter(self._target())
+
+    def __len__(self):
+        return len(self._target())
+
+    def __repr__(self):
+        return repr(self._target())
+
+    def get(self, key, default=None):
+        return self._target().get(key, default)
+
+    def setdefault(self, key, default=None):
+        return self._target().setdefault(key, default)
+
+    def pop(self, key, *args):
+        return self._target().pop(key, *args)
+
+    def keys(self):
+        return self._target().keys()
+
+    def values(self):
+        return self._target().values()
+
+    def items(self):
+        return self._target().items()
+
+    def update(self, *args, **kwargs):
+        self._target().update(*args, **kwargs)
+
+    def copy(self):
+        return self._target().copy()
+
+
 # --- GROUND-TRUTH CATALOG TO PREVENT HALLUCINATIONS ---
-TRUSTED_CATALOG = {
+_SEED_TRUSTED_CATALOG: dict[str, dict[str, Any]] = {
     "CHAIR-ERG-01": {"price": 120.00, "paypal_email": "office-supply@sandbox.paypal.com"},
     "KEYB-MECH-02": {"price": 65.00, "paypal_email": "peripherals@sandbox.paypal.com"},
     "MON-4K-27": {"price": 150.00, "paypal_email": "monitors-direct@sandbox.paypal.com"},
@@ -181,7 +242,7 @@ class CredentialsConfig(BaseModel):
 
 _init_sig = sign_cfo_policy("pol_aggrid_001", "procurement-01", 200.00, "OFFICE_AND_TECH")
 
-state = {
+_SEED_STATE_TEMPLATE: dict[str, Any] = {
     "policies": {
         "procurement-01": {
             "policy_id": "pol_aggrid_001",
@@ -365,7 +426,63 @@ state = {
     },
 }
 
+_FALLBACK_STATE: dict[str, Any] = copy.deepcopy(_SEED_STATE_TEMPLATE)
+_FALLBACK_CATALOG: dict[str, dict[str, Any]] = copy.deepcopy(_SEED_TRUSTED_CATALOG)
 subscribers: List[asyncio.Queue] = []
+
+
+def _get_session_bucket(sid: str | None = None, create: bool = False) -> dict[str, Any]:
+    resolved_sid = (sid or ACTIVE_SHIELD_SESSION_ID.get() or "").strip()
+    if not resolved_sid:
+        return {}
+    bucket = _byok_sessions.get(resolved_sid)
+    if bucket is None and create:
+        if len(_byok_sessions) >= MAX_BYOK_SESSIONS:
+            oldest_key = next(iter(_byok_sessions))
+            _byok_sessions.pop(oldest_key, None)
+        bucket = {}
+        _byok_sessions[resolved_sid] = bucket
+    return bucket if bucket is not None else {}
+
+
+def _resolve_session_state() -> dict[str, Any]:
+    sid = (ACTIVE_SHIELD_SESSION_ID.get() or "").strip()
+    if not sid:
+        return _FALLBACK_STATE
+    bucket = _get_session_bucket(sid, create=True)
+    st = bucket.get("state")
+    if st is None:
+        st = copy.deepcopy(_SEED_STATE_TEMPLATE)
+        bucket["state"] = st
+    return st
+
+
+def _resolve_session_catalog() -> dict[str, dict[str, Any]]:
+    sid = (ACTIVE_SHIELD_SESSION_ID.get() or "").strip()
+    if not sid:
+        return _FALLBACK_CATALOG
+    bucket = _get_session_bucket(sid, create=True)
+    cat = bucket.get("catalog")
+    if cat is None:
+        cat = copy.deepcopy(_SEED_TRUSTED_CATALOG)
+        bucket["catalog"] = cat
+    return cat
+
+
+def _get_session_subscribers(sid: str | None = None) -> List[asyncio.Queue]:
+    resolved_sid = (sid or ACTIVE_SHIELD_SESSION_ID.get() or "").strip()
+    if not resolved_sid:
+        return subscribers
+    bucket = _get_session_bucket(resolved_sid, create=True)
+    subs = bucket.get("subscribers")
+    if subs is None:
+        subs = []
+        bucket["subscribers"] = subs
+    return subs
+
+
+state: dict[str, Any] = _SessionScopedDict(_resolve_session_state)
+TRUSTED_CATALOG: dict[str, dict[str, Any]] = _SessionScopedDict(_resolve_session_catalog)
 
 
 def now_str() -> str:
@@ -401,7 +518,7 @@ async def broadcast_state():
         "taskboard_cards": state["taskboard_cards"],
         "adk_graph_telemetry": state["adk_graph_telemetry"],
     })
-    for q in subscribers:
+    for q in list(_get_session_subscribers()):
         await q.put(snapshot)
 
 
@@ -429,20 +546,6 @@ async def get_state():
         "taskboard_cards": state["taskboard_cards"],
         "adk_graph_telemetry": state["adk_graph_telemetry"],
     }
-
-
-def _get_session_bucket(sid: str | None = None, create: bool = False) -> dict[str, Any]:
-    resolved_sid = (sid or ACTIVE_SHIELD_SESSION_ID.get() or "").strip()
-    if not resolved_sid:
-        return {}
-    bucket = _byok_sessions.get(resolved_sid)
-    if bucket is None and create:
-        if len(_byok_sessions) >= MAX_BYOK_SESSIONS:
-            oldest_key = next(iter(_byok_sessions))
-            _byok_sessions.pop(oldest_key, None)
-        bucket = {}
-        _byok_sessions[resolved_sid] = bucket
-    return bucket if bucket is not None else {}
 
 
 def _get_session_cred(env_name: str, sid: str | None = None) -> str:
@@ -1484,7 +1587,8 @@ async def studio_ai_responses(request: Request):
 @app.get("/api/stream")
 async def stream_events(request: Request):
     q = asyncio.Queue()
-    subscribers.append(q)
+    session_subs = _get_session_subscribers()
+    session_subs.append(q)
     async def event_generator():
         try:
             while True:
@@ -1493,5 +1597,6 @@ async def stream_events(request: Request):
                 data = await q.get()
                 yield f"data: {data}\n\n"
         finally:
-            subscribers.remove(q)
+            if q in session_subs:
+                session_subs.remove(q)
     return StreamingResponse(event_generator(), media_type="text/event-stream")
