@@ -538,20 +538,6 @@ async def update_runtime_config(cfg: CredentialsConfig):
     session_pp = _get_session_paypal_sdk()
     effective_model = _get_session_cred("GEMINI_MODEL") or str(root_agent.model)
 
-    state["audit_log"].insert(0, {
-        "timestamp": now_str(),
-        "mandate_id": "SYS-CFG",
-        "item": "Session Credentials Updated (Isolated BYOK)",
-        "amount": 0.0,
-        "status": "POLICY_SIGNED",
-        "details": (
-            f"Model: {effective_model} | Gemini Key: {'SESSION_ACTIVE' if has_gemini else 'MISSING'} | "
-            f"Channel3: {'SESSION_ACTIVE' if has_channel3 else 'MISSING'} | "
-            f"PayPal: {'LIVE SANDBOX' if session_pp.is_configured else 'SIMULATED'} | "
-            f"Render Workflows: {'DISTRIBUTED' if has_render_wf else 'LOCAL_FALLBACK'}"
-        )
-    })
-    await broadcast_state()
     return {
         "status": "OK",
         "gemini_ready": has_gemini,
