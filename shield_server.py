@@ -522,8 +522,23 @@ async def broadcast_state():
         await q.put(snapshot)
 
 
-FRONTEND_DIST_DIR = Path(__file__).resolve().parent / "frontend" / "dist"
+FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
+FRONTEND_DIST_DIR = FRONTEND_DIR / "dist"
 FRONTEND_ASSETS_DIR = FRONTEND_DIST_DIR / "assets"
+
+if not (FRONTEND_DIST_DIR / "index.html").is_file():
+    import shutil
+    import subprocess
+
+    npm_bin = shutil.which("npm")
+    if npm_bin and (FRONTEND_DIR / "package.json").is_file():
+        try:
+            if not (FRONTEND_DIR / "node_modules").is_dir():
+                subprocess.run([npm_bin, "--prefix", str(FRONTEND_DIR), "ci"], check=True)
+            subprocess.run([npm_bin, "--prefix", str(FRONTEND_DIR), "run", "build"], check=True)
+        except Exception as _build_err:
+            print(f"[PayPal Agent Shield] Frontend auto-build warning: {_build_err}")
+
 if FRONTEND_ASSETS_DIR.is_dir():
     app.mount("/assets", StaticFiles(directory=str(FRONTEND_ASSETS_DIR)), name="assets")
 

@@ -139,12 +139,14 @@ The Unified Console ([`index.html`](./index.html)) includes **5 built-in red-tea
 ### 1. Prerequisites
 - **Python 3.12+**
 - **[`uv`](https://docs.astral.sh/uv/)** (Fast Python package manager) or standard `pip`
+- **Node.js 20+ & `npm`** (only needed if rebuilding the React + AG Studio 3 + Bryntum frontend bundle)
 
 ### 2. Clone & Install Dependencies
 ```bash
 git clone https://github.com/janfaiengineer/paypal-agent-shield.git
 cd paypal-agent-shield
 uv sync
+npm --prefix frontend ci && npm --prefix frontend run build
 ```
 
 ### 3. Configure Environment Variables (`.env` or Live BYOK Modal)
