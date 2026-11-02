@@ -142,7 +142,7 @@ The Unified Console ([`index.html`](./index.html)) includes **5 built-in red-tea
 
 ### 2. Clone & Install Dependencies
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/janfaiengineer/paypal-agent-shield.git
 cd paypal-agent-shield
 uv sync
 ```
