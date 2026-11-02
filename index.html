@@ -701,10 +701,6 @@
           render_api_key: renderKeyInput ? renderKeyInput.value : ""
         })
       });
-      document.getElementById("cfg-gemini").value = "";
-      document.getElementById("cfg-pp-secret").value = "";
-      document.getElementById("cfg-c3-key").value = "";
-      if (renderKeyInput) renderKeyInput.value = "";
       toggleConfigModal();
       await refreshCredsStatus();
     }

@@ -105,30 +105,83 @@ const SecretField: React.FC<SecretFieldProps> = ({
   );
 };
 
+const BYOK_STORAGE_KEYS = {
+  google_api_key: 'shield_byok_google_api_key',
+  paypal_client_id: 'shield_byok_paypal_client_id',
+  paypal_client_secret: 'shield_byok_paypal_client_secret',
+  channel3_api_key: 'shield_byok_channel3_api_key',
+  render_api_key: 'shield_byok_render_api_key',
+} as const;
+
+const readStoredCred = (key: string): string => {
+  try {
+    return sessionStorage.getItem(key) || '';
+  } catch {
+    return '';
+  }
+};
+
+const writeStoredCred = (key: string, value: string): void => {
+  try {
+    const trimmed = value.trim();
+    if (!trimmed || ['clear', 'reset', 'none'].includes(trimmed.toLowerCase())) {
+      sessionStorage.removeItem(key);
+    } else {
+      sessionStorage.setItem(key, trimmed);
+    }
+  } catch {
+    // Ignore storage errors in restricted environments
+  }
+};
+
 export const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSave }) => {
-  const [googleApiKey, setGoogleApiKey] = useState('');
-  const [paypalClientId, setPaypalClientId] = useState('');
-  const [paypalClientSecret, setPaypalClientSecret] = useState('');
-  const [channel3ApiKey, setChannel3ApiKey] = useState('');
-  const [renderApiKey, setRenderApiKey] = useState('');
+  const [googleApiKey, setGoogleApiKey] = useState(() =>
+    readStoredCred(BYOK_STORAGE_KEYS.google_api_key)
+  );
+  const [paypalClientId, setPaypalClientId] = useState(() =>
+    readStoredCred(BYOK_STORAGE_KEYS.paypal_client_id)
+  );
+  const [paypalClientSecret, setPaypalClientSecret] = useState(() =>
+    readStoredCred(BYOK_STORAGE_KEYS.paypal_client_secret)
+  );
+  const [channel3ApiKey, setChannel3ApiKey] = useState(() =>
+    readStoredCred(BYOK_STORAGE_KEYS.channel3_api_key)
+  );
+  const [renderApiKey, setRenderApiKey] = useState(() =>
+    readStoredCred(BYOK_STORAGE_KEYS.render_api_key)
+  );
   const [saving, setSaving] = useState(false);
 
   if (!isOpen) return null;
 
+  const resolveFieldPayload = (currentVal: string, storageKey: string): string => {
+    const trimmed = currentVal.trim();
+    const hadPrevious = Boolean(readStoredCred(storageKey));
+    if (!trimmed && hadPrevious) {
+      return 'clear';
+    }
+    return trimmed;
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
-      await onSave({
-        google_api_key: googleApiKey,
-        paypal_client_id: paypalClientId,
-        paypal_client_secret: paypalClientSecret,
-        channel3_api_key: channel3ApiKey,
-        render_api_key: renderApiKey,
-      });
-      setGoogleApiKey('');
-      setPaypalClientSecret('');
-      setChannel3ApiKey('');
-      setRenderApiKey('');
+      const payload: CredentialsPayload = {
+        google_api_key: resolveFieldPayload(googleApiKey, BYOK_STORAGE_KEYS.google_api_key),
+        paypal_client_id: resolveFieldPayload(paypalClientId, BYOK_STORAGE_KEYS.paypal_client_id),
+        paypal_client_secret: resolveFieldPayload(
+          paypalClientSecret,
+          BYOK_STORAGE_KEYS.paypal_client_secret
+        ),
+        channel3_api_key: resolveFieldPayload(channel3ApiKey, BYOK_STORAGE_KEYS.channel3_api_key),
+        render_api_key: resolveFieldPayload(renderApiKey, BYOK_STORAGE_KEYS.render_api_key),
+      };
+      await onSave(payload);
+      writeStoredCred(BYOK_STORAGE_KEYS.google_api_key, googleApiKey);
+      writeStoredCred(BYOK_STORAGE_KEYS.paypal_client_id, paypalClientId);
+      writeStoredCred(BYOK_STORAGE_KEYS.paypal_client_secret, paypalClientSecret);
+      writeStoredCred(BYOK_STORAGE_KEYS.channel3_api_key, channel3ApiKey);
+      writeStoredCred(BYOK_STORAGE_KEYS.render_api_key, renderApiKey);
       onClose();
     } finally {
       setSaving(false);
