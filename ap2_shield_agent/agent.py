@@ -1,3 +1,4 @@
+import contextvars
 import json
 import os
 import sys
@@ -10,6 +11,7 @@ from pydantic import BaseModel
 from google.adk.agents import Agent
 from google.adk.agents.context import Context
 from google.adk.events.event import Event
+from google.adk.models.google_llm import Gemini
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.workflow import Workflow, node
@@ -17,6 +19,11 @@ from google.genai import types
 
 load_dotenv()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
+
+# ContextVar holding the caller's isolated BYOK session ID during an HTTP request / ADK turn
+ACTIVE_SHIELD_SESSION_ID: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "active_shield_session_id", default=""
+)
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
@@ -65,6 +72,12 @@ def _get_candidate_base_urls() -> list[str]:
 
 async def _shield_request(method: str, path: str, timeout: float = 20.0, **kwargs) -> httpx.Response:
     """Dispatches a request to the Shield server, falling back across local ports on ConnectError."""
+    sid = ACTIVE_SHIELD_SESSION_ID.get()
+    if sid:
+        req_headers = dict(kwargs.get("headers") or {})
+        req_headers["X-Shield-Session-Id"] = sid
+        kwargs["headers"] = req_headers
+
     last_exc = None
     async with httpx.AsyncClient(timeout=timeout) as client:
         for base_url in _get_candidate_base_urls():
@@ -546,3 +559,22 @@ root_agent = Agent(
         resolve_quarantined_mandate_hitl,
     ]
 )
+
+
+def build_session_procurement_agent(api_key: str, model_name: str | None = None) -> Agent:
+    """
+    Constructs an isolated Google ADK Agent bound to a caller's private BYOK Gemini API key
+    via `Gemini(client_kwargs={'api_key': ...})` without mutating global `os.environ`.
+    """
+    effective_model = (model_name or GEMINI_MODEL).strip() or GEMINI_MODEL
+    llm = Gemini(
+        model=effective_model,
+        client_kwargs={"api_key": api_key.strip()},
+    )
+    return Agent(
+        name=root_agent.name,
+        model=llm,
+        description=root_agent.description,
+        instruction=root_agent.instruction,
+        tools=list(root_agent.tools),
+    )

@@ -1,12 +1,13 @@
 import os
 import re
 import math
+import secrets
 import asyncio
 import uuid
 import json
 from pathlib import Path
 from datetime import datetime
-from typing import List
+from typing import Any, List
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
@@ -51,7 +52,12 @@ from ap2_crypto import (
     CFO_PUBLIC_KEY,
     AGENT_PUBLIC_KEY,
 )
-from ap2_shield_agent.agent import root_agent, run_adk_checkout_graph_workflow
+from ap2_shield_agent.agent import (
+    ACTIVE_SHIELD_SESSION_ID,
+    build_session_procurement_agent,
+    root_agent,
+    run_adk_checkout_graph_workflow,
+)
 from ap2_shield_agent.studio_agent import (
     parse_studio_chart_request,
     run_studio_adk_turn,
@@ -59,6 +65,54 @@ from ap2_shield_agent.studio_agent import (
 
 app = FastAPI(title="PayPal Agent Shield — Unified Console")
 paypal_sdk = PayPalAPIMaticProcessor()
+
+# --- PER-BROWSER PRIVATE BYOK SESSION STORE (HTTPONLY COOKIE ISOLATION) ---
+BYOK_COOKIE_NAME = "shield_byok_sid"
+MAX_BYOK_SESSIONS = 500
+_SERVER_DEFAULT_ENV: dict[str, str] = {
+    "GOOGLE_API_KEY": os.environ.get("GOOGLE_API_KEY", "").strip(),
+    "GEMINI_API_KEY": os.environ.get("GEMINI_API_KEY", "").strip(),
+    "GEMINI_MODEL": os.environ.get("GEMINI_MODEL", str(root_agent.model)).strip() or str(root_agent.model),
+    "PAYPAL_CLIENT_ID": os.environ.get("PAYPAL_CLIENT_ID", "").strip(),
+    "PAYPAL_CLIENT_SECRET": os.environ.get("PAYPAL_CLIENT_SECRET", "").strip(),
+    "CHANNEL3_API_KEY": os.environ.get("CHANNEL3_API_KEY", "").strip(),
+    "RENDER_API_KEY": os.environ.get("RENDER_API_KEY", "").strip(),
+    "RENDER_WORKFLOW_SLUG": os.environ.get("RENDER_WORKFLOW_SLUG", "paypal-shield-workflow").strip() or "paypal-shield-workflow",
+}
+_byok_sessions: dict[str, dict[str, Any]] = {}
+
+
+@app.middleware("http")
+async def byok_session_isolation_middleware(request: Request, call_next):
+    """
+    Assigns and tracks an isolated HttpOnly session ID (`shield_byok_sid`) per browser
+    (and propagates `X-Shield-Session-Id` on internal ADK tool loopback calls) so that
+    any credentials entered in BYOK are 100% private to that browser and never shared.
+    """
+    internal_sid = (request.headers.get("X-Shield-Session-Id") or "").strip()
+    cookie_sid = (request.cookies.get(BYOK_COOKIE_NAME) or "").strip()
+    sid = internal_sid or cookie_sid
+    is_new_cookie = False
+    if not sid:
+        sid = secrets.token_urlsafe(24)
+        is_new_cookie = True
+
+    token = ACTIVE_SHIELD_SESSION_ID.set(sid)
+    try:
+        response = await call_next(request)
+    finally:
+        ACTIVE_SHIELD_SESSION_ID.reset(token)
+
+    if is_new_cookie and not internal_sid:
+        response.set_cookie(
+            key=BYOK_COOKIE_NAME,
+            value=sid,
+            httponly=True,
+            samesite="lax",
+            secure=(request.url.scheme == "https"),
+            path="/",
+        )
+    return response
 
 app.add_middleware(
     CORSMiddleware,
@@ -377,78 +431,133 @@ async def get_state():
     }
 
 
-def _has_valid_key(env_name: str) -> bool:
-    val = os.environ.get(env_name, "").strip()
+def _get_session_bucket(sid: str | None = None, create: bool = False) -> dict[str, Any]:
+    resolved_sid = (sid or ACTIVE_SHIELD_SESSION_ID.get() or "").strip()
+    if not resolved_sid:
+        return {}
+    bucket = _byok_sessions.get(resolved_sid)
+    if bucket is None and create:
+        if len(_byok_sessions) >= MAX_BYOK_SESSIONS:
+            oldest_key = next(iter(_byok_sessions))
+            _byok_sessions.pop(oldest_key, None)
+        bucket = {}
+        _byok_sessions[resolved_sid] = bucket
+    return bucket if bucket is not None else {}
+
+
+def _get_session_cred(env_name: str, sid: str | None = None) -> str:
+    bucket = _get_session_bucket(sid, create=False)
+    if env_name in bucket:
+        return str(bucket[env_name]).strip()
+    return _SERVER_DEFAULT_ENV.get(env_name, "").strip()
+
+
+def _has_valid_key(env_name: str, sid: str | None = None) -> bool:
+    val = _get_session_cred(env_name, sid)
     return bool(val) and "tu_api_key" not in val.lower() and "your_" not in val.lower()
+
+
+def _get_session_paypal_sdk(sid: str | None = None) -> PayPalAPIMaticProcessor:
+    bucket = _get_session_bucket(sid, create=False)
+    custom_sdk = bucket.get("paypal_sdk")
+    if isinstance(custom_sdk, PayPalAPIMaticProcessor):
+        return custom_sdk
+    return paypal_sdk
 
 
 @app.get("/api/config/status")
 async def get_config_status():
-    """Returns whether credentials are active (without exposing secrets to the browser)."""
+    """Returns whether credentials are active for this caller's private session (without exposing secrets)."""
     has_gemini = _has_valid_key("GOOGLE_API_KEY") or _has_valid_key("GEMINI_API_KEY")
     has_channel3 = _has_valid_key("CHANNEL3_API_KEY")
     has_render_wf = _has_valid_key("RENDER_API_KEY") and RenderAsync is not None
+    session_pp = _get_session_paypal_sdk()
+    effective_model = _get_session_cred("GEMINI_MODEL") or str(root_agent.model)
+    effective_slug = _get_session_cred("RENDER_WORKFLOW_SLUG") or "paypal-shield-workflow"
     return {
         "gemini_ready": has_gemini,
-        "gemini_model": str(root_agent.model),
-        "paypal_live_ready": paypal_sdk.is_configured,
+        "gemini_model": effective_model,
+        "paypal_live_ready": session_pp.is_configured,
         "channel3_ready": has_channel3,
         "render_workflow_ready": has_render_wf,
-        "render_workflow_slug": os.getenv("RENDER_WORKFLOW_SLUG", "paypal-shield-workflow"),
+        "render_workflow_slug": effective_slug,
     }
 
 
 @app.post("/api/config")
 async def update_runtime_config(cfg: CredentialsConfig):
-    """Updates in-memory credentials for Google ADK, PayPal APIMatic SDK, Channel3, and Render Workflows."""
+    """
+    Updates private per-browser BYOK credentials in the caller's isolated session bucket
+    (`shield_byok_sid` HttpOnly cookie) without writing to global `os.environ` or sharing
+    tokens with other visitors.
+    """
+    bucket = _get_session_bucket(create=True)
+
     if cfg.google_api_key.strip():
-        new_key = cfg.google_api_key.strip()
-        os.environ["GOOGLE_API_KEY"] = new_key
-        os.environ.pop("GEMINI_API_KEY", None)
-        if hasattr(root_agent, "_model_cache"):
-            root_agent._model_cache = type(root_agent._model_cache)()
+        val = cfg.google_api_key.strip()
+        if val.lower() in ("clear", "reset", "none"):
+            bucket["GOOGLE_API_KEY"] = ""
+            bucket["GEMINI_API_KEY"] = ""
+        else:
+            bucket["GOOGLE_API_KEY"] = val
+            bucket["GEMINI_API_KEY"] = ""
 
     if cfg.gemini_model.strip():
-        os.environ["GEMINI_MODEL"] = cfg.gemini_model.strip()
-        root_agent.model = cfg.gemini_model.strip()
-        if hasattr(root_agent, "_model_cache"):
-            root_agent._model_cache = type(root_agent._model_cache)()
+        bucket["GEMINI_MODEL"] = cfg.gemini_model.strip()
 
     if cfg.paypal_client_id.strip() and cfg.paypal_client_secret.strip():
-        os.environ["PAYPAL_CLIENT_ID"] = cfg.paypal_client_id.strip()
-        os.environ["PAYPAL_CLIENT_SECRET"] = cfg.paypal_client_secret.strip()
-        paypal_sdk.configure_credentials(cfg.paypal_client_id, cfg.paypal_client_secret)
+        pp_id = cfg.paypal_client_id.strip()
+        pp_sec = cfg.paypal_client_secret.strip()
+        if pp_id.lower() in ("clear", "reset", "none") or pp_sec.lower() in ("clear", "reset", "none"):
+            bucket["PAYPAL_CLIENT_ID"] = ""
+            bucket["PAYPAL_CLIENT_SECRET"] = ""
+            isolated_pp = PayPalAPIMaticProcessor()
+            isolated_pp.configure_credentials("", "")
+            bucket["paypal_sdk"] = isolated_pp
+        else:
+            bucket["PAYPAL_CLIENT_ID"] = pp_id
+            bucket["PAYPAL_CLIENT_SECRET"] = pp_sec
+            isolated_pp = PayPalAPIMaticProcessor()
+            isolated_pp.configure_credentials(pp_id, pp_sec)
+            bucket["paypal_sdk"] = isolated_pp
 
     if cfg.channel3_api_key.strip():
-        os.environ["CHANNEL3_API_KEY"] = cfg.channel3_api_key.strip()
+        val = cfg.channel3_api_key.strip()
+        bucket["CHANNEL3_API_KEY"] = "" if val.lower() in ("clear", "reset", "none") else val
 
     if cfg.render_api_key.strip():
-        os.environ["RENDER_API_KEY"] = cfg.render_api_key.strip()
+        val = cfg.render_api_key.strip()
+        bucket["RENDER_API_KEY"] = "" if val.lower() in ("clear", "reset", "none") else val
 
     if cfg.render_workflow_slug.strip():
-        os.environ["RENDER_WORKFLOW_SLUG"] = cfg.render_workflow_slug.strip()
+        bucket["RENDER_WORKFLOW_SLUG"] = cfg.render_workflow_slug.strip()
 
+    has_gemini = _has_valid_key("GOOGLE_API_KEY") or _has_valid_key("GEMINI_API_KEY")
+    has_channel3 = _has_valid_key("CHANNEL3_API_KEY")
     has_render_wf = _has_valid_key("RENDER_API_KEY") and RenderAsync is not None
+    session_pp = _get_session_paypal_sdk()
+    effective_model = _get_session_cred("GEMINI_MODEL") or str(root_agent.model)
+
     state["audit_log"].insert(0, {
         "timestamp": now_str(),
         "mandate_id": "SYS-CFG",
-        "item": "Runtime Credentials Updated",
+        "item": "Session Credentials Updated (Isolated BYOK)",
         "amount": 0.0,
         "status": "POLICY_SIGNED",
         "details": (
-            f"Model: {root_agent.model} | Gemini Key: {'ACTIVE' if os.environ.get('GOOGLE_API_KEY') else 'MISSING'} | "
-            f"Channel3: {'ACTIVE' if os.environ.get('CHANNEL3_API_KEY') else 'MISSING'} | "
-            f"PayPal: {'LIVE SANDBOX' if paypal_sdk.is_configured else 'SIMULATED'} | "
+            f"Model: {effective_model} | Gemini Key: {'SESSION_ACTIVE' if has_gemini else 'MISSING'} | "
+            f"Channel3: {'SESSION_ACTIVE' if has_channel3 else 'MISSING'} | "
+            f"PayPal: {'LIVE SANDBOX' if session_pp.is_configured else 'SIMULATED'} | "
             f"Render Workflows: {'DISTRIBUTED' if has_render_wf else 'LOCAL_FALLBACK'}"
         )
     })
     await broadcast_state()
     return {
         "status": "OK",
-        "gemini_ready": bool(os.environ.get("GOOGLE_API_KEY")),
-        "gemini_model": str(root_agent.model),
-        "paypal_live_ready": paypal_sdk.is_configured,
-        "channel3_ready": bool(os.environ.get("CHANNEL3_API_KEY")),
+        "gemini_ready": has_gemini,
+        "gemini_model": effective_model,
+        "paypal_live_ready": session_pp.is_configured,
+        "channel3_ready": has_channel3,
         "render_workflow_ready": has_render_wf,
     }
 
@@ -543,7 +652,7 @@ async def search_live_channel3(q: str = "office chair", max_price: float | None 
     and registers their official prices, availability, and buy links in TRUSTED_CATALOG
     to enforce the Shield's Anti-Hallucination validation.
     """
-    c3_key = os.environ.get("CHANNEL3_API_KEY", "").strip()
+    c3_key = _get_session_cred("CHANNEL3_API_KEY")
 
     def _build_fallback_catalog():
         return [
@@ -659,7 +768,7 @@ async def enrich_and_recommend_channel3(sku: str, max_price: float | None = None
     1. Live SKU enrichment (`title`, `description`, `key_features`, `availability`, `buy_url`, `variants`).
     2. Similar product recommendations (`find_similar`) optionally filtered by `max_price` (e.g., CFO budget).
     """
-    c3_key = os.environ.get("CHANNEL3_API_KEY", "").strip()
+    c3_key = _get_session_cred("CHANNEL3_API_KEY")
     if not c3_key or "tu_api_key" in c3_key or "your_" in c3_key.lower() or AsyncChannel3Client is None:
         item = TRUSTED_CATALOG.get(sku)
         return {
@@ -768,9 +877,10 @@ async def _settle_mandate_on_paypal(
     """Executes settlement on PayPal Sandbox via Render Workflows or local APIMatic SDK."""
     workflow_engine_note = "LOCAL_INLINE"
     pp_settlement = None
+    session_pp = _get_session_paypal_sdk()
 
     if _has_valid_key("RENDER_API_KEY") and RenderAsync is not None:
-        workflow_slug = os.getenv("RENDER_WORKFLOW_SLUG", "paypal-shield-workflow").strip() or "paypal-shield-workflow"
+        workflow_slug = _get_session_cred("RENDER_WORKFLOW_SLUG") or "paypal-shield-workflow"
         task_slug = f"{workflow_slug}/orchestrate_ap2_checkout_workflow"
         workflow_payload = {
             "mandate_id": mandate_id,
@@ -781,11 +891,11 @@ async def _settle_mandate_on_paypal(
             "total_amount": total_amount,
             "merchant_paypal_email": merchant_paypal_email,
             "agent_signature": agent_signature,
-            "paypal_client_id": paypal_sdk.client_id,
-            "paypal_client_secret": paypal_sdk.client_secret,
+            "paypal_client_id": session_pp.client_id,
+            "paypal_client_secret": session_pp.client_secret,
         }
         try:
-            render_client = RenderAsync(token=os.environ.get("RENDER_API_KEY", "").strip())
+            render_client = RenderAsync(token=_get_session_cred("RENDER_API_KEY"))
             task_run = await render_client.workflows.run_task(task_slug, [workflow_payload])
             wf_result = task_run.results[0] if getattr(task_run, "results", None) else {}
             if not wf_result.get("authorized"):
@@ -799,7 +909,7 @@ async def _settle_mandate_on_paypal(
     if pp_settlement is None:
         try:
             pp_settlement = await asyncio.to_thread(
-                paypal_sdk.execute_ap2_settlement,
+                session_pp.execute_ap2_settlement,
                 mandate_id=mandate_id,
                 parent_policy_hash=expected_hash,
                 product_name=product_name,
@@ -1265,21 +1375,35 @@ async def chat_endpoint(req: ChatRequest, request: Request):
             "tools": [],
         }
 
+    session_gemini_key = _get_session_cred("GOOGLE_API_KEY") or _get_session_cred("GEMINI_API_KEY")
+    session_model = _get_session_cred("GEMINI_MODEL") or str(root_agent.model)
+    scoped_session_id = f"{ACTIVE_SHIELD_SESSION_ID.get() or 'anon'}:{req.session_id}"
+
     session = await session_service.get_session(
-        app_name=APP_NAME, user_id=USER_ID, session_id=req.session_id
+        app_name=APP_NAME, user_id=USER_ID, session_id=scoped_session_id
     )
     if not session:
         await session_service.create_session(
-            app_name=APP_NAME, user_id=USER_ID, session_id=req.session_id
+            app_name=APP_NAME, user_id=USER_ID, session_id=scoped_session_id
         )
+
+    session_agent = build_session_procurement_agent(
+        api_key=session_gemini_key,
+        model_name=session_model,
+    )
+    session_runner = Runner(
+        agent=session_agent,
+        app_name=APP_NAME,
+        session_service=session_service,
+    )
 
     user_msg = types.Content(role="user", parts=[types.Part.from_text(text=req.message)])
     tools_called = []
     final_reply = ""
 
     try:
-        async for event in adk_runner.run_async(
-            user_id=USER_ID, session_id=req.session_id, new_message=user_msg
+        async for event in session_runner.run_async(
+            user_id=USER_ID, session_id=scoped_session_id, new_message=user_msg
         ):
             for fn in event.get_function_calls():
                 tools_called.append(fn.name)
@@ -1367,7 +1491,8 @@ async def studio_ai_responses(request: Request):
     except Exception:
         body = {}
 
-    return await run_studio_adk_turn(body, state)
+    session_gemini_key = _get_session_cred("GOOGLE_API_KEY") or _get_session_cred("GEMINI_API_KEY")
+    return await run_studio_adk_turn(body, state, api_key=session_gemini_key)
 
 
 @app.get("/api/stream")

@@ -23,6 +23,7 @@ from typing import Any
 
 from google.adk.agents import Agent
 from google.adk.events import Event
+from google.adk.models.google_llm import Gemini
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.tools.base_tool import BaseTool
@@ -390,6 +391,7 @@ def create_studio_bi_adk_agent(
     studio_instructions: str,
     tools_schema: list[dict[str, Any]],
     shield_state: dict[str, Any],
+    api_key: str = "",
 ) -> Agent:
     """
     Creates a `google.adk.agents.Agent` instance for the current AG Studio turn,
@@ -417,9 +419,15 @@ def create_studio_bi_adk_agent(
         combined_instruction += f"\n\n### AG Studio Role Instructions\n{studio_instructions.strip()}"
     combined_instruction += build_live_telemetry_context(shield_state)
 
+    llm_model = (
+        Gemini(model=normalized_model, client_kwargs={"api_key": api_key.strip()})
+        if api_key and api_key.strip()
+        else normalized_model
+    )
+
     return Agent(
         name=STUDIO_ADK_AGENT_NAME,
-        model=normalized_model,
+        model=llm_model,
         description=(
             "Google ADK Agent dedicated to Business Intelligence, dynamic chart "
             "construction, and AP2 forensic auditing inside AG Studio 3."
@@ -1162,11 +1170,12 @@ def _safeguard_configure_widget_args(
 async def run_studio_adk_turn(
     request_body: dict[str, Any],
     shield_state: dict[str, Any],
+    api_key: str | None = None,
 ) -> dict[str, Any]:
     """
     Executes a full turn of the Google ADK agent (`ap2_studio_bi_agent`) for AG Studio.
     If the user explicitly selected `ap2-deterministic-auditor` or no Gemini API Key
-    is configured in the environment, cleanly delegates to the enhanced deterministic engine.
+    is configured in the session/environment, cleanly delegates to the enhanced deterministic engine.
     """
     conv_items = request_body.get("input") or []
     tools_schema = request_body.get("tools") or []
@@ -1178,13 +1187,16 @@ async def run_studio_adk_turn(
     )
     turn_id = f"studio_adk_{uuid.uuid4().hex[:8]}"
 
-    api_key = (
-        os.environ.get("GEMINI_API_KEY")
-        or os.environ.get("GOOGLE_API_KEY")
-        or ""
-    ).strip()
+    if api_key is None:
+        resolved_api_key = (
+            os.environ.get("GEMINI_API_KEY")
+            or os.environ.get("GOOGLE_API_KEY")
+            or ""
+        ).strip()
+    else:
+        resolved_api_key = api_key.strip()
 
-    if requested_model_id == "ap2-deterministic-auditor" or not api_key:
+    if requested_model_id == "ap2-deterministic-auditor" or not resolved_api_key:
         return run_deterministic_studio_fallback(
             request_body,
             shield_state,
@@ -1198,6 +1210,7 @@ async def run_studio_adk_turn(
             studio_instructions=studio_instructions,
             tools_schema=tools_schema,
             shield_state=shield_state,
+            api_key=resolved_api_key,
         )
         history_events, new_message = _convert_studio_input_to_adk_events_and_message(conv_items)
 
